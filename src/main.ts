@@ -1,4 +1,4 @@
-import { Logger } from '@nestjs/common';
+import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { appConfig } from './config/app.config';
@@ -8,6 +8,16 @@ async function bootstrap() {
   process.loadEnvFile();
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix(appConfig.apiPrefix);
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: true,
+      },
+    }),
+  );
   setupApiDocs(app);
 
   const port = appConfig.port;

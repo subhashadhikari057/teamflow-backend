@@ -11,7 +11,7 @@
 1. [Core Principles](#1-core-principles)
 2. [Project Structure](#2-project-structure)
 3. [Module Structure](#3-module-structure)
-4. [API Surface — Web, Admin, Mobile](#4-api-surface--web-admin-mobile)
+4. [API Surface — Admin, Mobile, Auth](#4-api-surface--admin-mobile-auth)
 5. [DTO Rules](#5-dto-rules)
 6. [Controller Rules](#6-controller-rules)
 7. [Service Rules](#7-service-rules)
@@ -66,6 +66,7 @@ Depend on abstractions, not concretions.
 - **No database calls in controllers** — ever
 - **No raw Prisma calls in services** — use a repository layer
 - **Everything passes through a DTO** — no raw `body`, `query`, or `param` without a typed DTO
+- **Every API must have request and response DTOs** — no endpoint without typed request DTOs and typed response DTOs
 - **No `any` type** — TypeScript strict mode is on, use it
 - **No silent failures** — every error must be thrown as a typed exception
 
@@ -138,14 +139,6 @@ src/modules/<module-name>/
 │
 ├── <module-name>.module.ts           # NestJS module definition
 │
-├── web/                              # Public-facing API (/api/v1/...)
-│   ├── <module-name>.controller.ts
-│   ├── <module-name>.service.ts
-│   └── dto/
-│       ├── create-<entity>.dto.ts
-│       ├── update-<entity>.dto.ts
-│       └── <entity>-response.dto.ts
-│
 ├── admin/                            # Admin API (/api/admin/...)
 │   ├── admin-<module-name>.controller.ts
 │   ├── admin-<module-name>.service.ts
@@ -175,14 +168,6 @@ src/modules/<module-name>/
 ```
 src/modules/messages/
 ├── messages.module.ts
-├── web/
-│   ├── messages.controller.ts
-│   ├── messages.service.ts
-│   └── dto/
-│       ├── send-message.dto.ts
-│       ├── update-message.dto.ts
-│       ├── message-response.dto.ts
-│       └── message-query.dto.ts
 ├── admin/
 │   ├── admin-messages.controller.ts
 │   ├── admin-messages.service.ts
@@ -203,27 +188,27 @@ src/modules/messages/
 
 ---
 
-## 4. API Surface — Web, Admin, Mobile
+## 4. API Surface — Admin, Mobile, Auth
 
 ### Route Prefixes
 
 | Surface | Prefix | Guard |
 |---|---|---|
-| Web (default) | `/api/v1/` | `JwtAuthGuard` |
 | Admin | `/api/admin/` | `JwtAuthGuard` + `AdminGuard` |
 | Mobile | `/api/mobile/` | `JwtAuthGuard` + `MobileGuard` |
+| Auth (shared) | `/api/auth/` | Varies by endpoint |
 
 ### Controller Prefix Convention
 
 ```typescript
-// Web controller
-@Controller('api/v1/messages')
-
 // Admin controller
 @Controller('api/admin/messages')
 
 // Mobile controller
 @Controller('api/mobile/messages')
+
+// Shared auth controller
+@Controller('api/auth')
 ```
 
 ### Why Separate Controllers Per Surface?
@@ -699,14 +684,14 @@ export class MessagesRepository {
 ### Swagger Tags By Surface
 
 ```typescript
-// Web
-@ApiTags('Messages')
-
 // Admin
 @ApiTags('Admin — Messages')
 
 // Mobile
 @ApiTags('Mobile — Messages')
+
+// Shared auth
+@ApiTags('Auth')
 ```
 
 ### Swagger Setup in main.ts
@@ -718,10 +703,6 @@ const config = new DocumentBuilder()
   .setVersion('1.0')
   .addBearerAuth()
   .addTag('Auth')
-  .addTag('Users')
-  .addTag('Workspaces')
-  .addTag('Channels')
-  .addTag('Messages')
   .addTag('Admin — Users')
   .addTag('Admin — Workspaces')
   .addTag('Mobile — Messages')
@@ -922,13 +903,13 @@ export class AdminUsersController {}
 
 | Type | Convention | Example |
 |---|---|---|
-| Controller | `<entity>.controller.ts` | `messages.controller.ts` |
-| Service | `<entity>.service.ts` | `messages.service.ts` |
+| Controller | `<surface>-<entity>.controller.ts` | `admin-messages.controller.ts` |
+| Service | `<surface>-<entity>.service.ts` | `admin-messages.service.ts` |
 | Repository | `<entity>.repository.ts` | `messages.repository.ts` |
 | Module | `<entity>.module.ts` | `messages.module.ts` |
-| DTO (request) | `<verb>-<entity>.dto.ts` | `send-message.dto.ts` |
-| DTO (response) | `<entity>-response.dto.ts` | `message-response.dto.ts` |
-| DTO (query) | `<entity>-query.dto.ts` | `message-query.dto.ts` |
+| DTO (request) | `<surface>-<verb>-<entity>.dto.ts` | `admin-create-message.dto.ts` |
+| DTO (response) | `<surface>-<entity>-response.dto.ts` | `mobile-message-response.dto.ts` |
+| DTO (query) | `<surface>-<entity>-query.dto.ts` | `mobile-message-query.dto.ts` |
 | Interface | `<entity>.interface.ts` | `messages.interface.ts` |
 | Guard | `<name>.guard.ts` | `jwt-auth.guard.ts` |
 | Decorator | `<name>.decorator.ts` | `current-user.decorator.ts` |
@@ -939,10 +920,10 @@ export class AdminUsersController {}
 
 | Type | Convention | Example |
 |---|---|---|
-| Controller | PascalCase + Controller | `MessagesController` |
 | Admin Controller | Admin + PascalCase + Controller | `AdminMessagesController` |
 | Mobile Controller | Mobile + PascalCase + Controller | `MobileMessagesController` |
-| Service | PascalCase + Service | `MessagesService` |
+| Auth Controller | PascalCase + Controller | `AuthController` |
+| Service | Surface + PascalCase + Service | `AdminMessagesService` |
 | Repository | PascalCase + Repository | `MessagesRepository` |
 | DTO | PascalCase + Dto | `SendMessageDto` |
 | Response DTO | PascalCase + ResponseDto | `MessageResponseDto` |

@@ -52,6 +52,15 @@ export function setupApiDocs(app: INestApplication) {
     .setTitle('Teamflow API')
     .setDescription('Teamflow backend API documentation')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'Paste a valid JWT access token',
+      },
+      'bearer',
+    )
     .build();
 
   const fullDocument = SwaggerModule.createDocument(app, documentConfig);
