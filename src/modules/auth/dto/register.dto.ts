@@ -11,12 +11,14 @@ import {
 export class RegisterDto {
   @ApiProperty({
     description: 'Email address for the account',
+    example: 'subhashadhikari057@gmail.com',
   })
   @IsEmail()
   email!: string;
 
   @ApiProperty({
     description: 'Public username',
+    example: 'seenu.subhash',
   })
   @IsString()
   @MinLength(3)
@@ -28,6 +30,7 @@ export class RegisterDto {
 
   @ApiProperty({
     description: 'User password',
+    example: 'Subhash@123',
     minLength: 8,
   })
   @IsString()
@@ -37,6 +40,7 @@ export class RegisterDto {
 
   @ApiProperty({
     description: 'Display name',
+    example: 'Subhash Adhikari',
   })
   @IsString()
   @MinLength(2)
@@ -45,6 +49,7 @@ export class RegisterDto {
 
   @ApiPropertyOptional({
     description: 'Optional phone number',
+    example: '+9779827828632',
   })
   @IsOptional()
   @IsString()
