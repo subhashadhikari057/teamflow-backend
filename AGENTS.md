@@ -67,6 +67,7 @@ Depend on abstractions, not concretions.
 - **No raw Prisma calls in services** — use a repository layer
 - **Everything passes through a DTO** — no raw `body`, `query`, or `param` without a typed DTO
 - **Every API must have request and response DTOs** — no endpoint without typed request DTOs and typed response DTOs
+- **Every module must define and use explicit error codes** — no module-level errors without stable `errorCode` constants
 - **No `any` type** — TypeScript strict mode is on, use it
 - **No silent failures** — every error must be thrown as a typed exception
 

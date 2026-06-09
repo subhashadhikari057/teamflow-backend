@@ -1,6 +1,7 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { appConfig } from './config/app.config';
 import { setupApiDocs } from './config/swagger.config';
 
@@ -18,6 +19,7 @@ async function bootstrap() {
       },
     }),
   );
+  app.useGlobalFilters(new GlobalExceptionFilter());
   setupApiDocs(app);
 
   const port = appConfig.port;

@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  ForbiddenException,
-  Injectable,
-  NotFoundException,
-  ServiceUnavailableException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import {
   GlobalRole,
@@ -19,11 +11,12 @@ import {
 import * as bcrypt from 'bcryptjs';
 import { plainToInstance } from 'class-transformer';
 import { createHash, randomBytes } from 'node:crypto';
+import { AppException } from '../../common/exceptions/app.exception';
 import { authConfig } from '../../config/auth.config';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
-import { AUTH_OAUTH_STATE_PREFIX } from './auth.types';
+import { AUTH_ERROR_CODES, AUTH_OAUTH_STATE_PREFIX } from './auth.types';
 import type {
   AccessTokenPayload,
   OAuthProfile,
@@ -95,21 +88,35 @@ export class AuthService {
       : await this.authRepository.findUserByUsername(dto.identifier);
 
     if (!user || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+        'Invalid credentials',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
     if (!passwordMatches) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_CREDENTIALS,
+        'Invalid credentials',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     if (!user.isActive || user.deletedAt) {
-      throw new ForbiddenException('Account is inactive');
+      throw new AppException(
+        AUTH_ERROR_CODES.ACCOUNT_INACTIVE,
+        'Account is inactive',
+        { status: HttpStatus.FORBIDDEN },
+      );
     }
 
     if (!user.isEmailVerified) {
-      throw new ForbiddenException(
+      throw new AppException(
+        AUTH_ERROR_CODES.EMAIL_NOT_VERIFIED,
         'Please verify your email before logging in',
+        { status: HttpStatus.FORBIDDEN },
       );
     }
 
@@ -123,7 +130,11 @@ export class AuthService {
       await this.authRepository.findRefreshTokenByHash(refreshTokenHash);
 
     if (!refreshToken || refreshToken.userId !== user.id) {
-      throw new NotFoundException('Refresh token not found');
+      throw new AppException(
+        AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
+        'Refresh token not found',
+        { status: HttpStatus.NOT_FOUND },
+      );
     }
 
     await this.authRepository.revokeRefreshToken(refreshToken.id);
@@ -144,11 +155,19 @@ export class AuthService {
         { secret: authConfig.jwtRefreshSecret },
       );
     } catch {
-      throw new UnauthorizedException('Refresh token is invalid or expired');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
+        'Refresh token is invalid or expired',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     if (payload.type !== 'refresh') {
-      throw new UnauthorizedException('Invalid refresh token');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
+        'Invalid refresh token',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     const refreshTokenHash = this.hashToken(dto.refreshToken);
@@ -156,7 +175,11 @@ export class AuthService {
       await this.authRepository.findRefreshTokenByHash(refreshTokenHash);
 
     if (!refreshToken || refreshToken.isRevoked || refreshToken.expiresAt <= new Date()) {
-      throw new UnauthorizedException('Refresh token is invalid or revoked');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
+        'Refresh token is invalid or revoked',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     await this.authRepository.revokeRefreshToken(refreshToken.id);
@@ -169,7 +192,11 @@ export class AuthService {
       await this.authRepository.findUserByVerificationToken(verificationTokenHash);
 
     if (!user || !user.verificationExpiry || user.verificationExpiry <= new Date()) {
-      throw new BadRequestException('Verification token is invalid or expired');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_VERIFICATION_TOKEN,
+        'Verification token is invalid or expired',
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     await this.authRepository.updateUser(user.id, {
@@ -249,7 +276,11 @@ export class AuthService {
       !reset.user.isActive ||
       reset.user.deletedAt
     ) {
-      throw new BadRequestException('Password reset token is invalid or expired');
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_RESET_TOKEN,
+        'Password reset token is invalid or expired',
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const passwordHash = await bcrypt.hash(
@@ -272,7 +303,11 @@ export class AuthService {
     const dbUser = await this.getActiveUserOrThrow(user.id);
 
     if (!dbUser.passwordHash) {
-      throw new BadRequestException('Password login is not enabled for this account');
+      throw new AppException(
+        AUTH_ERROR_CODES.PASSWORD_LOGIN_NOT_ENABLED,
+        'Password login is not enabled for this account',
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     const passwordMatches = await bcrypt.compare(
@@ -281,7 +316,11 @@ export class AuthService {
     );
 
     if (!passwordMatches) {
-      throw new UnauthorizedException('Current password is incorrect');
+      throw new AppException(
+        AUTH_ERROR_CODES.CURRENT_PASSWORD_INVALID,
+        'Current password is incorrect',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     const passwordHash = await bcrypt.hash(
@@ -440,8 +479,10 @@ export class AuthService {
         emails.find((item) => item.primary) ?? emails.find((item) => item.verified);
 
       if (!primaryEmail) {
-        throw new BadRequestException(
+        throw new AppException(
+          AUTH_ERROR_CODES.INVALID_CREDENTIALS,
           'GitHub account does not provide a usable email address',
+          { status: HttpStatus.BAD_REQUEST },
         );
       }
 
@@ -466,12 +507,20 @@ export class AuthService {
       dto.email.toLowerCase(),
     );
     if (existingEmail) {
-      throw new ConflictException('Email is already registered');
+      throw new AppException(
+        AUTH_ERROR_CODES.EMAIL_ALREADY_REGISTERED,
+        'Email is already registered',
+        { status: HttpStatus.CONFLICT },
+      );
     }
 
     const existingUsername = await this.authRepository.findUserByUsername(dto.username);
     if (existingUsername) {
-      throw new ConflictException('Username is already taken');
+      throw new AppException(
+        AUTH_ERROR_CODES.USERNAME_ALREADY_TAKEN,
+        'Username is already taken',
+        { status: HttpStatus.CONFLICT },
+      );
     }
   }
 
@@ -543,7 +592,9 @@ export class AuthService {
     const user = await this.authRepository.findUserById(userId);
 
     if (!user || !user.isActive || user.deletedAt) {
-      throw new NotFoundException('User not found');
+      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
+        status: HttpStatus.NOT_FOUND,
+      });
     }
 
     return user;
@@ -621,7 +672,11 @@ export class AuthService {
       !authConfig.googleClientSecret ||
       !authConfig.googleCallbackUrl
     ) {
-      throw new ServiceUnavailableException('Google OAuth is not configured');
+      throw new AppException(
+        AUTH_ERROR_CODES.GOOGLE_OAUTH_NOT_CONFIGURED,
+        'Google OAuth is not configured',
+        { status: HttpStatus.SERVICE_UNAVAILABLE },
+      );
     }
   }
 
@@ -631,7 +686,11 @@ export class AuthService {
       !authConfig.githubClientSecret ||
       !authConfig.githubCallbackUrl
     ) {
-      throw new ServiceUnavailableException('GitHub OAuth is not configured');
+      throw new AppException(
+        AUTH_ERROR_CODES.GITHUB_OAUTH_NOT_CONFIGURED,
+        'GitHub OAuth is not configured',
+        { status: HttpStatus.SERVICE_UNAVAILABLE },
+      );
     }
   }
 
@@ -659,7 +718,11 @@ export class AuthService {
     const value = await client.get(key);
 
     if (!value) {
-      throw new BadRequestException('OAuth state is invalid or expired');
+      throw new AppException(
+        AUTH_ERROR_CODES.OAUTH_STATE_INVALID,
+        'OAuth state is invalid or expired',
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     await client.del(key);
@@ -741,7 +804,11 @@ export class AuthService {
     const response = await fetch(input, init);
 
     if (!response.ok) {
-      throw new BadRequestException(`External authentication request failed: ${response.status}`);
+      throw new AppException(
+        AUTH_ERROR_CODES.OAUTH_PROVIDER_REQUEST_FAILED,
+        `External authentication request failed: ${response.status}`,
+        { status: HttpStatus.BAD_REQUEST },
+      );
     }
 
     return (await response.json()) as T;

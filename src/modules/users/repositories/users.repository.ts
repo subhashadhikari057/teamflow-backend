@@ -45,4 +45,17 @@ export class UsersRepository {
       },
     });
   }
+
+  findByIdIncludingDeleted(id: string): Promise<User | null> {
+    return this.prisma.user.findUnique({
+      where: { id },
+    });
+  }
+
+  update(id: string, data: Prisma.UserUpdateInput): Promise<User> {
+    return this.prisma.user.update({
+      where: { id },
+      data,
+    });
+  }
 }

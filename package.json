@@ -13,6 +13,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:seed:super-admin": "ts-node prisma/seed-super-admin.ts",
     "prisma:studio": "prisma studio",
     "start": "node dist/main",
     "start:dev": "nest start --watch",

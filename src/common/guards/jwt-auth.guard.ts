@@ -1,12 +1,14 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpStatus,
   Injectable,
-  UnauthorizedException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import type { Request } from 'express';
+import { AUTH_ERROR_CODES } from '../../modules/auth/auth.types';
 import { authConfig } from '../../config/auth.config';
+import { AppException } from '../exceptions/app.exception';
 import type { AuthUser } from '../interfaces/auth-user.interface';
 
 type AccessTokenPayload = {
@@ -26,7 +28,11 @@ export class JwtAuthGuard implements CanActivate {
     const token = this.extractTokenFromHeader(request);
 
     if (!token) {
-      throw new UnauthorizedException('Access token is missing');
+      throw new AppException(
+        AUTH_ERROR_CODES.ACCESS_TOKEN_MISSING,
+        'Access token is missing',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
 
     try {
@@ -35,7 +41,11 @@ export class JwtAuthGuard implements CanActivate {
       });
 
       if (payload.type !== 'access') {
-        throw new UnauthorizedException('Invalid access token');
+        throw new AppException(
+          AUTH_ERROR_CODES.ACCESS_TOKEN_INVALID,
+          'Invalid access token',
+          { status: HttpStatus.UNAUTHORIZED },
+        );
       }
 
       request.user = {
@@ -46,7 +56,11 @@ export class JwtAuthGuard implements CanActivate {
       };
       return true;
     } catch {
-      throw new UnauthorizedException('Access token is invalid or expired');
+      throw new AppException(
+        AUTH_ERROR_CODES.ACCESS_TOKEN_INVALID,
+        'Access token is invalid or expired',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
     }
   }
 

@@ -5,7 +5,6 @@ import { PaginationQueryDto } from './pagination-query.dto';
 export class SearchQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
     description: 'Search by relevant text fields',
-    example: 'john',
   })
   @IsOptional()
   @IsString()
