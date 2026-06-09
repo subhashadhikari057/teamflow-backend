@@ -1,5 +1,8 @@
 import { Injectable, Logger, OnApplicationBootstrap } from '@nestjs/common';
 import { Socket } from 'node:net';
+import { databaseConfig } from '../config/database.config';
+import { mailConfig } from '../config/mail.config';
+import { redisConfig } from '../config/redis.config';
 
 type StartupDependency = {
   host?: string;
@@ -14,24 +17,24 @@ export class StartupService implements OnApplicationBootstrap {
   async onApplicationBootstrap() {
     await this.logDependencyStatus({
       name: 'Postgres',
-      host: process.env.DB_HOST,
-      port: process.env.DB_PORT,
+      host: databaseConfig.host,
+      port: String(databaseConfig.port),
     });
 
     await this.logDependencyStatus({
       name: 'Redis',
-      host: process.env.REDIS_HOST,
-      port: process.env.REDIS_PORT,
+      host: redisConfig.host,
+      port: String(redisConfig.port),
     });
 
     await this.logDependencyStatus({
       name: 'SMTP',
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
+      host: mailConfig.host,
+      port: String(mailConfig.port),
     });
 
-    this.logUiUrl('Redis UI', process.env.REDIS_UI_URL);
-    this.logUiUrl('Mailpit UI', process.env.MAILPIT_UI_URL);
+    this.logUiUrl('Redis UI', redisConfig.uiUrl);
+    this.logUiUrl('Mailpit UI', mailConfig.mailpitUiUrl);
   }
 
   private async logDependencyStatus(dependency: StartupDependency) {

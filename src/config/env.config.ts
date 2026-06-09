@@ -1,0 +1,3 @@
+process.loadEnvFile();
+
+export {};
