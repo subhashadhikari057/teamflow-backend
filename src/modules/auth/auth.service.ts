@@ -5,7 +5,6 @@ import {
   OAuthProvider,
   type OAuthAccount,
   type PasswordReset,
-  type RefreshToken,
   type User,
 } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
@@ -17,13 +16,10 @@ import { EmailService } from '../../infrastructure/email/email.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AUTH_ERROR_CODES, AUTH_OAUTH_STATE_PREFIX } from './auth.types';
-import type {
-  AccessTokenPayload,
-  OAuthProfile,
-  RefreshTokenPayload,
-} from './interfaces/auth.interface';
+import type { OAuthProfile, RefreshTokenPayload } from './interfaces/auth.interface';
 import { AuthRepository } from './repositories/auth.repository';
 import { AuthActionResponseDto } from './dto/auth-action-response.dto';
+import { AuthLoginResponseDto } from './dto/auth-login-response.dto';
 import { AuthSessionResponseDto } from './dto/auth-session-response.dto';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -35,8 +31,9 @@ import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { TokenPairResponseDto } from './dto/token-pair-response.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { AuthSessionsService } from './auth-sessions.service';
+import { AuthTwoFactorService } from './auth-two-factor.service';
 
 @Injectable()
 export class AuthService {
@@ -45,6 +42,8 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly redisService: RedisService,
     private readonly emailService: EmailService,
+    private readonly authSessionsService: AuthSessionsService,
+    private readonly authTwoFactorService: AuthTwoFactorService,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthActionResponseDto> {
@@ -82,7 +81,7 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto): Promise<AuthSessionResponseDto> {
+  async login(dto: LoginDto): Promise<AuthLoginResponseDto> {
     const user = dto.identifier.includes('@')
       ? await this.authRepository.findUserByEmail(dto.identifier.toLowerCase())
       : await this.authRepository.findUserByUsername(dto.identifier);
@@ -121,15 +120,28 @@ export class AuthService {
     }
 
     await this.authRepository.updateUser(user.id, { lastSeenAt: new Date() });
-    return this.createSessionResponse(user);
+
+    if (user.twoFactorEnabled) {
+      return this.authTwoFactorService.createLoginChallenge(user);
+    }
+
+    const session = await this.authSessionsService.issueSessionResponse(user);
+
+    return plainToInstance(
+      AuthLoginResponseDto,
+      {
+        requiresTwoFactor: false,
+        session,
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async logout(user: AuthUser, dto: LogoutDto) {
     const refreshTokenHash = this.hashToken(dto.refreshToken);
-    const refreshToken =
-      await this.authRepository.findRefreshTokenByHash(refreshTokenHash);
+    const session = await this.authRepository.findSessionByHash(refreshTokenHash);
 
-    if (!refreshToken || refreshToken.userId !== user.id) {
+    if (!session || session.userId !== user.id) {
       throw new AppException(
         AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
         'Refresh token not found',
@@ -137,7 +149,7 @@ export class AuthService {
       );
     }
 
-    await this.authRepository.revokeRefreshToken(refreshToken.id);
+    await this.authRepository.revokeSession(session.id);
 
     return plainToInstance(
       AuthActionResponseDto,
@@ -171,10 +183,14 @@ export class AuthService {
     }
 
     const refreshTokenHash = this.hashToken(dto.refreshToken);
-    const refreshToken =
-      await this.authRepository.findRefreshTokenByHash(refreshTokenHash);
+    const session = await this.authRepository.findSessionByHash(refreshTokenHash);
 
-    if (!refreshToken || refreshToken.isRevoked || refreshToken.expiresAt <= new Date()) {
+    if (
+      !session ||
+      session.id !== payload.sessionId ||
+      session.isRevoked ||
+      session.expiresAt <= new Date()
+    ) {
       throw new AppException(
         AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
         'Refresh token is invalid or revoked',
@@ -182,8 +198,8 @@ export class AuthService {
       );
     }
 
-    await this.authRepository.revokeRefreshToken(refreshToken.id);
-    return this.createSessionResponse(refreshToken.user);
+    await this.authRepository.revokeSession(session.id);
+    return this.authSessionsService.issueSessionResponse(session.user);
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
@@ -290,7 +306,7 @@ export class AuthService {
 
     await this.authRepository.updateUser(reset.userId, { passwordHash });
     await this.authRepository.markPasswordResetUsed(reset.id);
-    await this.authRepository.revokeAllRefreshTokensForUser(reset.userId);
+    await this.authRepository.revokeAllSessionsForUser(reset.userId);
 
     return plainToInstance(
       AuthActionResponseDto,
@@ -329,7 +345,7 @@ export class AuthService {
     );
 
     await this.authRepository.updateUser(dbUser.id, { passwordHash });
-    await this.authRepository.revokeAllRefreshTokensForUser(dbUser.id);
+    await this.authRepository.revokeAllSessionsForUser(dbUser.id);
 
     return plainToInstance(
       AuthActionResponseDto,
@@ -524,64 +540,6 @@ export class AuthService {
     }
   }
 
-  private async createSessionResponse(user: User) {
-    const tokens = await this.issueTokenPair(user);
-    return plainToInstance(
-      AuthSessionResponseDto,
-      {
-        user: this.mapUserResponse(user),
-        tokens,
-      },
-      { excludeExtraneousValues: true },
-    );
-  }
-
-  private async issueTokenPair(user: User) {
-    const accessTokenPayload: AccessTokenPayload = {
-      sub: user.id,
-      email: user.email,
-      username: user.username,
-      role: user.role,
-      type: 'access',
-    };
-
-    const refreshTokenPayload: RefreshTokenPayload = {
-      sub: user.id,
-      type: 'refresh',
-    };
-
-    const [accessToken, refreshToken] = await Promise.all([
-      this.jwtService.signAsync(accessTokenPayload, {
-        secret: authConfig.jwtSecret,
-        expiresIn: this.resolveJwtExpirySeconds(authConfig.jwtExpiresIn),
-      }),
-      this.jwtService.signAsync(refreshTokenPayload, {
-        secret: authConfig.jwtRefreshSecret,
-        expiresIn: this.resolveJwtExpirySeconds(
-          authConfig.jwtRefreshExpiresIn,
-        ),
-      }),
-    ]);
-
-    const refreshTokenHash = this.hashToken(refreshToken);
-    await this.authRepository.createRefreshToken({
-      userId: user.id,
-      tokenHash: refreshTokenHash,
-      expiresAt: this.resolveExpiryDate(authConfig.jwtRefreshExpiresIn),
-    });
-
-    return plainToInstance(
-      TokenPairResponseDto,
-      {
-        accessToken,
-        refreshToken,
-        accessTokenExpiresIn: authConfig.jwtExpiresIn,
-        refreshTokenExpiresIn: authConfig.jwtRefreshExpiresIn,
-      },
-      { excludeExtraneousValues: true },
-    );
-  }
-
   private mapUserResponse(user: User) {
     return plainToInstance(AuthUserResponseDto, user, {
       excludeExtraneousValues: true,
@@ -610,52 +568,6 @@ export class AuthService {
 
   private futureDateInMinutes(minutes: number) {
     return new Date(Date.now() + minutes * 60 * 1000);
-  }
-
-  private resolveExpiryDate(expiresIn: string) {
-    const match = /^(\d+)([smhd])$/.exec(expiresIn);
-
-    if (!match) {
-      return this.futureDateInMinutes(60 * 24 * 30);
-    }
-
-    const value = Number(match[1]);
-    const unit = match[2];
-    const multiplier =
-      unit === 's'
-        ? 1000
-        : unit === 'm'
-          ? 60_000
-          : unit === 'h'
-            ? 3_600_000
-            : 86_400_000;
-
-    return new Date(Date.now() + value * multiplier);
-  }
-
-  private resolveJwtExpirySeconds(expiresIn: string) {
-    const match = /^(\d+)([smhd])$/.exec(expiresIn);
-
-    if (!match) {
-      return 60 * 60 * 24 * 30;
-    }
-
-    const value = Number(match[1]);
-    const unit = match[2];
-
-    if (unit === 's') {
-      return value;
-    }
-
-    if (unit === 'm') {
-      return value * 60;
-    }
-
-    if (unit === 'h') {
-      return value * 60 * 60;
-    }
-
-    return value * 60 * 60 * 24;
   }
 
   private async sendVerificationEmail(user: User, token: string) {
@@ -750,7 +662,7 @@ export class AuthService {
         name: profile.name,
       });
 
-      return this.createSessionResponse(existingAccount.user);
+      return this.authSessionsService.issueSessionResponse(existingAccount.user);
     }
 
     let user = await this.authRepository.findUserByEmail(profile.email.toLowerCase());
@@ -778,7 +690,7 @@ export class AuthService {
       expiresAt: profile.providerTokenExpiresAt ?? null,
     });
 
-    return this.createSessionResponse(user);
+    return this.authSessionsService.issueSessionResponse(user);
   }
 
   private usernameFromProfile(profile: OAuthProfile) {

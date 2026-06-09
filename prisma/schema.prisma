@@ -35,13 +35,16 @@ model User {
   isEmailVerified     Boolean    @default(false)
   verificationToken   String?    @unique
   verificationExpiry  DateTime?
+  twoFactorEnabled    Boolean    @default(false)
+  twoFactorSecret     String?
   isActive            Boolean    @default(true)
   lastSeenAt          DateTime?
   createdAt           DateTime   @default(now())
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
 
-  refreshTokens        RefreshToken[]
+  sessions             Session[]
+  twoFactorBackupCodes TwoFactorBackupCode[]
   passwordResets       PasswordReset[]
   oauthAccounts        OAuthAccount[]
   workspaceMemberships WorkspaceMember[]
@@ -52,22 +55,27 @@ model User {
   @@map("users")
 }
 
-model RefreshToken {
-  id         String   @id @default(uuid())
-  userId     String
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  isRevoked  Boolean  @default(false)
-  ipAddress  String?
-  userAgent  String?
-  createdAt  DateTime @default(now())
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  tokenHash    String   @unique
+  expiresAt    DateTime
+  isRevoked    Boolean  @default(false)
+  deviceToken  String?
+  deviceType   String?
+  deviceName   String?
+  ipAddress    String?
+  userAgent    String?
+  location     String?
+  lastActiveAt DateTime @default(now())
+  createdAt    DateTime @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
   @@index([expiresAt])
-  @@map("refresh_tokens")
+  @@map("sessions")
 }
 
 model PasswordReset {
@@ -84,6 +92,19 @@ model PasswordReset {
   @@index([userId])
   @@index([tokenHash])
   @@map("password_resets")
+}
+
+model TwoFactorBackupCode {
+  id        String   @id @default(uuid())
+  userId    String
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factor_backup_codes")
 }
 
 model OAuthAccount {

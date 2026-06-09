@@ -19,6 +19,7 @@ import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AuthActionResponseDto } from './dto/auth-action-response.dto';
+import { AuthLoginResponseDto } from './dto/auth-login-response.dto';
 import { AuthSessionResponseDto } from './dto/auth-session-response.dto';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -53,10 +54,10 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with email or username and password' })
-  @ApiResponse({ status: 200, type: AuthSessionResponseDto })
+  @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 403, description: 'Email is not verified' })
-  login(@Body() dto: LoginDto): Promise<AuthSessionResponseDto> {
+  login(@Body() dto: LoginDto): Promise<AuthLoginResponseDto> {
     return this.authService.login(dto);
   }
 

@@ -1,10 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import {
   OAuthProvider,
-  type OAuthAccount,
   type PasswordReset,
   type Prisma,
-  type RefreshToken,
+  type TwoFactorBackupCode,
+  type Session,
   type User,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
@@ -42,27 +42,62 @@ export class AuthRepository {
     });
   }
 
-  createRefreshToken(data: Prisma.RefreshTokenUncheckedCreateInput) {
-    return this.prisma.refreshToken.create({ data });
+  createSession(data: Prisma.SessionUncheckedCreateInput) {
+    return this.prisma.session.create({ data });
   }
 
-  findRefreshTokenByHash(tokenHash: string) {
-    return this.prisma.refreshToken.findFirst({
+  findSessionByHash(tokenHash: string) {
+    return this.prisma.session.findFirst({
       where: { tokenHash },
       include: { user: true },
     });
   }
 
-  revokeRefreshToken(id: string) {
-    return this.prisma.refreshToken.update({
+  findSessionById(id: string) {
+    return this.prisma.session.findUnique({
+      where: { id },
+    });
+  }
+
+  findActiveSessionsByUserId(userId: string) {
+    return this.prisma.session.findMany({
+      where: {
+        userId,
+        isRevoked: false,
+        expiresAt: { gt: new Date() },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  revokeSession(id: string) {
+    return this.prisma.session.update({
       where: { id },
       data: { isRevoked: true },
     });
   }
 
-  revokeAllRefreshTokensForUser(userId: string) {
-    return this.prisma.refreshToken.updateMany({
+  touchSession(id: string) {
+    return this.prisma.session.update({
+      where: { id },
+      data: { lastActiveAt: new Date() },
+    });
+  }
+
+  revokeAllSessionsForUser(userId: string) {
+    return this.prisma.session.updateMany({
       where: { userId, isRevoked: false },
+      data: { isRevoked: true },
+    });
+  }
+
+  revokeOtherSessionsForUser(userId: string, currentSessionId: string) {
+    return this.prisma.session.updateMany({
+      where: {
+        userId,
+        isRevoked: false,
+        id: { not: currentSessionId },
+      },
       data: { isRevoked: true },
     });
   }
@@ -106,6 +141,35 @@ export class AuthRepository {
   findUserByVerificationToken(token: string) {
     return this.prisma.user.findFirst({
       where: { verificationToken: token, deletedAt: null },
+    });
+  }
+
+  deleteTwoFactorBackupCodesForUser(userId: string) {
+    return this.prisma.twoFactorBackupCode.deleteMany({
+      where: { userId },
+    });
+  }
+
+  createTwoFactorBackupCodes(data: Prisma.TwoFactorBackupCodeUncheckedCreateInput[]) {
+    return this.prisma.twoFactorBackupCode.createMany({
+      data,
+    });
+  }
+
+  findUnusedBackupCodeByHash(userId: string, codeHash: string) {
+    return this.prisma.twoFactorBackupCode.findFirst({
+      where: {
+        userId,
+        codeHash,
+        usedAt: null,
+      },
+    });
+  }
+
+  markBackupCodeUsed(id: string) {
+    return this.prisma.twoFactorBackupCode.update({
+      where: { id },
+      data: { usedAt: new Date() },
     });
   }
 }

@@ -16,6 +16,7 @@ type AccessTokenPayload = {
   email: string;
   username: string;
   role: AuthUser['role'];
+  sessionId: string;
   type: 'access';
 };
 
@@ -51,6 +52,7 @@ export class JwtAuthGuard implements CanActivate {
       request.user = {
         id: payload.sub,
         email: payload.email,
+        sessionId: payload.sessionId,
         username: payload.username,
         role: payload.role,
       };
