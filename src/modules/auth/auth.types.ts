@@ -1,4 +1,5 @@
 export const AUTH_OAUTH_STATE_PREFIX = 'auth:oauth:state';
+export const AUTH_OAUTH_ERROR_REDIRECT_PATH = '/login?error=oauth_failed';
 
 export type AuthTokenType = 'access' | 'refresh';
 

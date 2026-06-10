@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Delete, Get, HttpCode, HttpStatus, Param, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -23,8 +23,11 @@ export class AuthSessionsController {
   }
 
   @Delete(':id')
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke a specific session for the authenticated user' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Session not found' })
   revokeSession(
     @CurrentUser() user: AuthUser,
     @Param() params: AuthSessionIdParamDto,
@@ -33,8 +36,10 @@ export class AuthSessionsController {
   }
 
   @Delete()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke all sessions except the current session' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   revokeOtherSessions(
     @CurrentUser() user: AuthUser,
   ): Promise<AuthActionResponseDto> {

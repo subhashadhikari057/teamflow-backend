@@ -26,9 +26,7 @@ import { ChangePasswordDto } from './dto/change-password.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { LogoutDto } from './dto/logout.dto';
 import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
-import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
@@ -138,8 +136,15 @@ export class AuthService {
     );
   }
 
-  async logout(user: AuthUser, dto: LogoutDto) {
-    const refreshTokenHash = this.hashToken(dto.refreshToken);
+  async logout(user: AuthUser, refreshToken: string | undefined): Promise<AuthActionResponseDto> {
+    if (!refreshToken) {
+      throw new AppException(
+        AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
+        'Refresh token not found',
+        { status: HttpStatus.NOT_FOUND },
+      );
+    }
+    const refreshTokenHash = this.hashToken(refreshToken);
     const session = await this.authRepository.findSessionByHash(refreshTokenHash);
 
     if (!session || session.userId !== user.id) {
@@ -159,12 +164,20 @@ export class AuthService {
     );
   }
 
-  async refresh(dto: RefreshDto) {
+  async refresh(refreshToken: string | undefined): Promise<AuthSessionResponseDto> {
+    if (!refreshToken) {
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
+        'Refresh token is missing',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
+    }
+
     let payload: RefreshTokenPayload;
 
     try {
       payload = await this.jwtService.verifyAsync<RefreshTokenPayload>(
-        dto.refreshToken,
+        refreshToken,
         { secret: authConfig.jwtRefreshSecret },
       );
     } catch {
@@ -183,7 +196,7 @@ export class AuthService {
       );
     }
 
-    const refreshTokenHash = this.hashToken(dto.refreshToken);
+    const refreshTokenHash = this.hashToken(refreshToken);
     const session = await this.authRepository.findSessionByHash(refreshTokenHash);
 
     if (
@@ -411,7 +424,7 @@ export class AuthService {
 
   async handleGoogleCallback(code: string, state: string) {
     this.ensureGoogleOauthConfigured();
-    await this.consumeOAuthState('google', state);
+    const { redirectUri } = await this.consumeOAuthState('google', state);
 
     const tokenResponse = await this.fetchJson<{
       access_token: string;
@@ -442,7 +455,7 @@ export class AuthService {
       },
     });
 
-    return this.handleOAuthLogin({
+    const session = await this.handleOAuthLogin({
       avatarUrl: profile.picture,
       email: profile.email,
       emailVerified: profile.email_verified,
@@ -455,11 +468,13 @@ export class AuthService {
         ? new Date(Date.now() + tokenResponse.expires_in * 1000)
         : undefined,
     });
+
+    return { session, redirectUri };
   }
 
   async handleGithubCallback(code: string, state: string) {
     this.ensureGithubOauthConfigured();
-    await this.consumeOAuthState('github', state);
+    const { redirectUri } = await this.consumeOAuthState('github', state);
 
     const tokenResponse = await this.fetchJson<{
       access_token: string;
@@ -519,7 +534,7 @@ export class AuthService {
       emailVerified = primaryEmail.verified;
     }
 
-    return this.handleOAuthLogin({
+    const session = await this.handleOAuthLogin({
       avatarUrl: profile.avatar_url,
       email,
       emailVerified,
@@ -529,6 +544,8 @@ export class AuthService {
       providerAccountId: String(profile.id),
       providerRefreshToken: tokenResponse.refresh_token,
     });
+
+    return { session, redirectUri };
   }
 
   private async ensureRegisterInputsAvailable(dto: RegisterDto) {

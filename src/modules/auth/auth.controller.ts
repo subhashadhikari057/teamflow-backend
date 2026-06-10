@@ -7,11 +7,10 @@ import {
   Patch,
   Post,
   Query,
-  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Request, Response } from 'express';
+import type { Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -19,6 +18,7 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Cookie } from '../../common/decorators/cookie.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AuthActionResponseDto } from './dto/auth-action-response.dto';
@@ -28,7 +28,7 @@ import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { AUTH_ERROR_CODES } from './auth.types';
+import { AUTH_ERROR_CODES, AUTH_OAUTH_ERROR_REDIRECT_PATH } from './auth.types';
 import { AppException } from '../../common/exceptions/app.exception';
 import { OAuthAuthorizationQueryDto } from './dto/oauth-authorization-query.dto';
 import { OAuthCallbackQueryDto } from './dto/oauth-callback-query.dto';
@@ -40,6 +40,7 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
 import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
+import { appConfig } from '../../config/app.config';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -60,14 +61,15 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with email or username and password' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  @ApiResponse({ status: 403, description: 'Email is not verified' })
+  @ApiResponse({ status: 403, description: 'Email not verified or account inactive' })
   async login(
     @Body() dto: LoginDto,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthLoginResponseDto> {
     const result = await this.authService.login(dto);
-    if (!result.requiresTwoFactor && result.session) {
+    if (result.session) {
       setAuthCookies(res, result.session.tokens);
     }
     return result;
@@ -80,20 +82,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Log out and revoke a refresh token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Refresh token not found' })
   async logout(
     @CurrentUser() user: AuthUser,
-    @Req() req: Request,
+    @Cookie('refresh_token') refreshToken: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthActionResponseDto> {
-    const refreshToken = (req as any).cookies?.refresh_token;
-    if (!refreshToken) {
-      throw new AppException(
-        AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
-        'Refresh token not found',
-        { status: HttpStatus.NOT_FOUND },
-      );
-    }
-    const result = await this.authService.logout(user, { refreshToken });
+    const result = await this.authService.logout(user, refreshToken);
     clearAuthCookies(res);
     return result;
   }
@@ -102,21 +97,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Exchange a refresh token for a new session' })
   @ApiResponse({ status: 200, type: AuthSessionResponseDto })
-  @ApiResponse({ status: 401, description: 'Invalid refresh token' })
+  @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
   async refresh(
-    @Req() req: Request,
+    @Cookie('refresh_token') refreshToken: string | undefined,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthSessionResponseDto> {
-    console.log('[Auth] Refresh token endpoint hit');
-    const refreshToken = (req as any).cookies?.refresh_token;
-    if (!refreshToken) {
-      throw new AppException(
-        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
-        'Refresh token is missing',
-        { status: HttpStatus.UNAUTHORIZED },
-      );
-    }
-    const result = await this.authService.refresh({ refreshToken });
+    const result = await this.authService.refresh(refreshToken);
     setAuthCookies(res, result.tokens);
     return result;
   }
@@ -134,6 +120,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend the email verification token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   resendVerification(
     @Body() dto: ResendVerificationDto,
   ): Promise<AuthActionResponseDto> {
@@ -144,6 +131,7 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a password reset token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   forgotPassword(@Body() dto: ForgotPasswordDto): Promise<AuthActionResponseDto> {
     return this.authService.forgotPassword(dto);
   }
@@ -160,9 +148,11 @@ export class AuthController {
   @Patch('change-password')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change the password for the authenticated user' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 400, description: 'Validation error or password login not enabled' })
+  @ApiResponse({ status: 401, description: 'Unauthorized or current password is incorrect' })
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
@@ -176,6 +166,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Get the authenticated user profile' })
   @ApiResponse({ status: 200, type: AuthUserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   me(@CurrentUser() user: AuthUser): Promise<AuthUserResponseDto> {
     return this.authService.me(user);
   }
@@ -183,9 +174,12 @@ export class AuthController {
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Update the authenticated user profile' })
   @ApiResponse({ status: 200, type: AuthUserResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   updateProfile(
     @CurrentUser() user: AuthUser,
     @Body() dto: UpdateProfileDto,
@@ -196,6 +190,7 @@ export class AuthController {
   @Get('google')
   @ApiOperation({ summary: 'Generate the Google OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
+  @ApiResponse({ status: 503, description: 'Google OAuth is not configured' })
   google(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {
@@ -207,17 +202,24 @@ export class AuthController {
 
   @Get('google/callback')
   @ApiOperation({ summary: 'Handle the Google OAuth callback' })
-  @ApiResponse({ status: 200, type: AuthSessionResponseDto })
-  @ApiResponse({ status: 400, description: 'OAuth callback failed' })
-  googleCallback(
+  @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
+  async googleCallback(
     @Query() query: OAuthCallbackQueryDto,
-  ): Promise<AuthSessionResponseDto> {
-    return this.authService.handleGoogleCallback(query.code, query.state);
+    @Res() res: Response,
+  ): Promise<void> {
+    let dest = `${appConfig.clientUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
+    try {
+      const { session, redirectUri } = await this.authService.handleGoogleCallback(query.code, query.state);
+      setAuthCookies(res, session.tokens);
+      dest = `${appConfig.clientUrl}${redirectUri ?? ''}`;
+    } catch { /* dest stays as error redirect */ }
+    res.redirect(302, dest);
   }
 
   @Get('github')
   @ApiOperation({ summary: 'Generate the GitHub OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
+  @ApiResponse({ status: 503, description: 'GitHub OAuth is not configured' })
   github(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {
@@ -229,11 +231,17 @@ export class AuthController {
 
   @Get('github/callback')
   @ApiOperation({ summary: 'Handle the GitHub OAuth callback' })
-  @ApiResponse({ status: 200, type: AuthSessionResponseDto })
-  @ApiResponse({ status: 400, description: 'OAuth callback failed' })
-  githubCallback(
+  @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
+  async githubCallback(
     @Query() query: OAuthCallbackQueryDto,
-  ): Promise<AuthSessionResponseDto> {
-    return this.authService.handleGithubCallback(query.code, query.state);
+    @Res() res: Response,
+  ): Promise<void> {
+    let dest = `${appConfig.clientUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
+    try {
+      const { session, redirectUri } = await this.authService.handleGithubCallback(query.code, query.state);
+      setAuthCookies(res, session.tokens);
+      dest = `${appConfig.clientUrl}${redirectUri ?? ''}`;
+    } catch { /* dest stays as error redirect */ }
+    res.redirect(302, dest);
   }
 }
