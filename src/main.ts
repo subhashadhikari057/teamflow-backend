@@ -1,5 +1,6 @@
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { appConfig } from './config/app.config';
@@ -8,6 +9,8 @@ import { setupApiDocs } from './config/swagger.config';
 async function bootstrap() {
   process.loadEnvFile();
   const app = await NestFactory.create(AppModule);
+  app.use(cookieParser());
+  app.enableCors({ origin: 'http://localhost:3000', credentials: true });
   app.setGlobalPrefix(appConfig.apiPrefix);
   app.useGlobalPipes(
     new ValidationPipe({

@@ -7,8 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
+  Res,
   UseGuards,
 } from '@nestjs/common';
+import type { Request, Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -25,16 +28,37 @@ import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
-import { LogoutDto } from './dto/logout.dto';
+import { AUTH_ERROR_CODES } from './auth.types';
+import { AppException } from '../../common/exceptions/app.exception';
 import { OAuthAuthorizationQueryDto } from './dto/oauth-authorization-query.dto';
 import { OAuthCallbackQueryDto } from './dto/oauth-callback-query.dto';
 import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
-import { RefreshDto } from './dto/refresh.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
+import { appConfig } from '../../config/app.config';
 import { AuthService } from './auth.service';
+
+function setAuthCookies(res: Response, tokens: { accessToken: string; refreshToken: string }) {
+  res.cookie('access_token', tokens.accessToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: appConfig.isProduction,
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+  res.cookie('refresh_token', tokens.refreshToken, {
+    httpOnly: true,
+    sameSite: 'strict',
+    secure: appConfig.isProduction,
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function clearAuthCookies(res: Response) {
+  res.clearCookie('access_token');
+  res.clearCookie('refresh_token');
+}
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -57,8 +81,15 @@ export class AuthController {
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 403, description: 'Email is not verified' })
-  login(@Body() dto: LoginDto): Promise<AuthLoginResponseDto> {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: LoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthLoginResponseDto> {
+    const result = await this.authService.login(dto);
+    if (!result.requiresTwoFactor && result.session) {
+      setAuthCookies(res, result.session.tokens);
+    }
+    return result;
   }
 
   @Post('logout')
@@ -68,11 +99,22 @@ export class AuthController {
   @ApiOperation({ summary: 'Log out and revoke a refresh token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  logout(
+  async logout(
     @CurrentUser() user: AuthUser,
-    @Body() dto: LogoutDto,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<AuthActionResponseDto> {
-    return this.authService.logout(user, dto);
+    const refreshToken = (req as any).cookies?.refresh_token;
+    if (!refreshToken) {
+      throw new AppException(
+        AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
+        'Refresh token not found',
+        { status: HttpStatus.NOT_FOUND },
+      );
+    }
+    const result = await this.authService.logout(user, { refreshToken });
+    clearAuthCookies(res);
+    return result;
   }
 
   @Post('refresh')
@@ -80,8 +122,21 @@ export class AuthController {
   @ApiOperation({ summary: 'Exchange a refresh token for a new session' })
   @ApiResponse({ status: 200, type: AuthSessionResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid refresh token' })
-  refresh(@Body() dto: RefreshDto): Promise<AuthSessionResponseDto> {
-    return this.authService.refresh(dto);
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthSessionResponseDto> {
+    const refreshToken = (req as any).cookies?.refresh_token;
+    if (!refreshToken) {
+      throw new AppException(
+        AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
+        'Refresh token is missing',
+        { status: HttpStatus.UNAUTHORIZED },
+      );
+    }
+    const result = await this.authService.refresh({ refreshToken });
+    setAuthCookies(res, result.tokens);
+    return result;
   }
 
   @Post('verify-email')
