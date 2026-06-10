@@ -11,13 +11,6 @@ enum GlobalRole {
   USER
 }
 
-enum WorkspaceRole {
-  OWNER
-  ADMIN
-  MEMBER
-  GUEST
-}
-
 enum OAuthProvider {
   GOOGLE
   GITHUB
@@ -47,8 +40,6 @@ model User {
   twoFactorBackupCodes TwoFactorBackupCode[]
   passwordResets       PasswordReset[]
   oauthAccounts        OAuthAccount[]
-  workspaceMemberships WorkspaceMember[]
-
   @@index([email])
   @@index([username])
   @@index([deletedAt])
@@ -125,37 +116,3 @@ model OAuthAccount {
   @@map("oauth_accounts")
 }
 
-model Workspace {
-  id         String            @id @default(uuid())
-  name       String
-  slug       String            @unique
-  logoUrl    String?
-  isActive   Boolean           @default(true)
-  createdAt  DateTime          @default(now())
-  updatedAt  DateTime          @updatedAt
-  deletedAt  DateTime?
-
-  members    WorkspaceMember[]
-
-  @@index([slug])
-  @@index([deletedAt])
-  @@map("workspaces")
-}
-
-model WorkspaceMember {
-  id          String        @id @default(uuid())
-  workspaceId String
-  userId      String
-  role        WorkspaceRole @default(MEMBER)
-  isActive    Boolean       @default(true)
-  joinedAt    DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-
-  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([workspaceId, userId])
-  @@index([workspaceId])
-  @@index([userId])
-  @@map("workspace_members")
-}

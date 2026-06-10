@@ -2,9 +2,6 @@
 CREATE TYPE "GlobalRole" AS ENUM ('ADMIN', 'USER');
 
 -- CreateEnum
-CREATE TYPE "WorkspaceRole" AS ENUM ('OWNER', 'ADMIN', 'MEMBER', 'GUEST');
-
--- CreateEnum
 CREATE TYPE "OAuthProvider" AS ENUM ('GOOGLE', 'GITHUB');
 
 -- CreateTable
@@ -89,33 +86,6 @@ CREATE TABLE "oauth_accounts" (
     CONSTRAINT "oauth_accounts_pkey" PRIMARY KEY ("id")
 );
 
--- CreateTable
-CREATE TABLE "workspaces" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "slug" TEXT NOT NULL,
-    "logoUrl" TEXT,
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-    "deletedAt" TIMESTAMP(3),
-
-    CONSTRAINT "workspaces_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "workspace_members" (
-    "id" TEXT NOT NULL,
-    "workspaceId" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "role" "WorkspaceRole" NOT NULL DEFAULT 'MEMBER',
-    "isActive" BOOLEAN NOT NULL DEFAULT true,
-    "joinedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "workspace_members_pkey" PRIMARY KEY ("id")
-);
-
 -- CreateIndex
 CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
 
@@ -167,24 +137,6 @@ CREATE INDEX "oauth_accounts_userId_idx" ON "oauth_accounts"("userId");
 -- CreateIndex
 CREATE UNIQUE INDEX "oauth_accounts_provider_providerAccountId_key" ON "oauth_accounts"("provider", "providerAccountId");
 
--- CreateIndex
-CREATE UNIQUE INDEX "workspaces_slug_key" ON "workspaces"("slug");
-
--- CreateIndex
-CREATE INDEX "workspaces_slug_idx" ON "workspaces"("slug");
-
--- CreateIndex
-CREATE INDEX "workspaces_deletedAt_idx" ON "workspaces"("deletedAt");
-
--- CreateIndex
-CREATE INDEX "workspace_members_workspaceId_idx" ON "workspace_members"("workspaceId");
-
--- CreateIndex
-CREATE INDEX "workspace_members_userId_idx" ON "workspace_members"("userId");
-
--- CreateIndex
-CREATE UNIQUE INDEX "workspace_members_workspaceId_userId_key" ON "workspace_members"("workspaceId", "userId");
-
 -- AddForeignKey
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
@@ -197,8 +149,3 @@ ALTER TABLE "two_factor_backup_codes" ADD CONSTRAINT "two_factor_backup_codes_us
 -- AddForeignKey
 ALTER TABLE "oauth_accounts" ADD CONSTRAINT "oauth_accounts_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
--- AddForeignKey
-ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_workspaceId_fkey" FOREIGN KEY ("workspaceId") REFERENCES "workspaces"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "workspace_members" ADD CONSTRAINT "workspace_members_userId_fkey" FOREIGN KEY ("userId") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
