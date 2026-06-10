@@ -1,0 +1,6 @@
+-- CreateEnum
+CREATE TYPE "UserStatus" AS ENUM ('ONLINE', 'AWAY', 'BUSY', 'OFFLINE', 'DO_NOT_DISTURB', 'IN_A_MEETING', 'ON_VACATION', 'OUT_OF_OFFICE', 'FOCUSING');
+
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "status" "UserStatus" NOT NULL DEFAULT 'ONLINE',
+ADD COLUMN     "timezone" TEXT;

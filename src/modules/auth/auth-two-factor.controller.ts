@@ -1,5 +1,6 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import type { Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
@@ -10,7 +11,9 @@ import { AuthTwoFactorBackupCodesResponseDto } from './dto/auth-two-factor-backu
 import { AuthTwoFactorEnableResponseDto } from './dto/auth-two-factor-enable-response.dto';
 import { ConfirmTwoFactorDto } from './dto/confirm-two-factor.dto';
 import { DisableTwoFactorDto } from './dto/disable-two-factor.dto';
+import { RegenerateBackupCodesDto } from './dto/regenerate-backup-codes.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
+import { setAuthCookies } from './auth-cookies.util';
 
 @ApiTags('Auth 2FA')
 @Controller('auth/2fa')
@@ -54,8 +57,15 @@ export class AuthTwoFactorController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify a 2FA code during login' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
-  verify(@Body() dto: VerifyTwoFactorDto): Promise<AuthLoginResponseDto> {
-    return this.authTwoFactorService.verify(dto);
+  async verify(
+    @Body() dto: VerifyTwoFactorDto,
+    @Res({ passthrough: true }) res: Response,
+  ): Promise<AuthLoginResponseDto> {
+    const result = await this.authTwoFactorService.verify(dto);
+    if (!result.requiresTwoFactor && result.session) {
+      setAuthCookies(res, result.session.tokens);
+    }
+    return result;
   }
 
   @Get('backup-codes')
@@ -72,11 +82,12 @@ export class AuthTwoFactorController {
   @Post('backup-codes/regenerate')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Regenerate backup codes for 2FA' })
+  @ApiOperation({ summary: 'Regenerate backup codes for 2FA (requires current password)' })
   @ApiResponse({ status: 200, type: AuthTwoFactorBackupCodesResponseDto })
   regenerateBackupCodes(
     @CurrentUser() user: AuthUser,
+    @Body() dto: RegenerateBackupCodesDto,
   ): Promise<AuthTwoFactorBackupCodesResponseDto> {
-    return this.authTwoFactorService.regenerateBackupCodes(user);
+    return this.authTwoFactorService.regenerateBackupCodes(user, dto);
   }
 }

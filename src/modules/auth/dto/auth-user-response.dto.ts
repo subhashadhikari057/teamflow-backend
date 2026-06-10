@@ -1,4 +1,4 @@
-import { GlobalRole } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
 
@@ -54,6 +54,21 @@ export class AuthUserResponseDto {
   role!: GlobalRole;
 
   @ApiProperty({
+    description: 'Presence status',
+    enum: UserStatus,
+    example: UserStatus.ONLINE,
+  })
+  @Expose()
+  status!: UserStatus;
+
+  @ApiPropertyOptional({
+    description: 'IANA timezone',
+    example: 'Asia/Kathmandu',
+  })
+  @Expose()
+  timezone?: string | null;
+
+  @ApiProperty({
     description: 'Whether the email has been verified',
     example: false,
   })
@@ -73,6 +88,13 @@ export class AuthUserResponseDto {
   })
   @Expose()
   lastSeenAt?: Date;
+
+  @ApiProperty({
+    description: 'Whether two-factor authentication is enabled',
+    example: false,
+  })
+  @Expose()
+  twoFactorEnabled!: boolean;
 
   @ApiProperty({
     description: 'Creation timestamp',

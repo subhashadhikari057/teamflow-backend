@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { GlobalRole } from '@prisma/client';
+import { GlobalRole, UserStatus } from '@prisma/client';
 import { Expose } from 'class-transformer';
 
 export class AdminUserResponseDto {
@@ -52,6 +52,21 @@ export class AdminUserResponseDto {
   })
   @Expose()
   role!: GlobalRole;
+
+  @ApiProperty({
+    description: 'Presence status',
+    enum: UserStatus,
+    example: UserStatus.ONLINE,
+  })
+  @Expose()
+  status!: UserStatus;
+
+  @ApiPropertyOptional({
+    description: 'IANA timezone',
+    example: 'Asia/Kathmandu',
+  })
+  @Expose()
+  timezone?: string | null;
 
   @ApiProperty({
     description: 'Whether the email is verified',

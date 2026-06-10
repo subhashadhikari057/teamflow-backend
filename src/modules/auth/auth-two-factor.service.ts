@@ -15,6 +15,7 @@ import { AuthTwoFactorBackupCodesResponseDto } from './dto/auth-two-factor-backu
 import { AuthTwoFactorEnableResponseDto } from './dto/auth-two-factor-enable-response.dto';
 import { ConfirmTwoFactorDto } from './dto/confirm-two-factor.dto';
 import { DisableTwoFactorDto } from './dto/disable-two-factor.dto';
+import { RegenerateBackupCodesDto } from './dto/regenerate-backup-codes.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { AuthRepository } from './repositories/auth.repository';
 import { AuthSessionsService } from './auth-sessions.service';
@@ -222,6 +223,7 @@ export class AuthTwoFactorService {
 
   async regenerateBackupCodes(
     user: AuthUser,
+    dto: RegenerateBackupCodesDto,
   ): Promise<AuthTwoFactorBackupCodesResponseDto> {
     const dbUser = await this.getActiveUserOrThrow(user.id);
 
@@ -230,6 +232,24 @@ export class AuthTwoFactorService {
         AUTH_ERROR_CODES.TWO_FACTOR_NOT_ENABLED,
         'Two-factor authentication is not enabled',
         { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+
+    if (!dbUser.passwordHash) {
+      throw new AppException(
+        AUTH_ERROR_CODES.PASSWORD_LOGIN_NOT_ENABLED,
+        'Password login is not enabled for this account',
+        { status: HttpStatus.BAD_REQUEST },
+      );
+    }
+
+    const passwordMatches = await bcrypt.compare(dto.password, dbUser.passwordHash);
+
+    if (!passwordMatches) {
+      throw new AppException(
+        AUTH_ERROR_CODES.CURRENT_PASSWORD_INVALID,
+        'Current password is incorrect',
+        { status: HttpStatus.UNAUTHORIZED },
       );
     }
 

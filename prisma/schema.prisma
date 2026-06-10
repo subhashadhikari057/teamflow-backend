@@ -16,6 +16,18 @@ enum OAuthProvider {
   GITHUB
 }
 
+enum UserStatus {
+  ONLINE
+  AWAY
+  BUSY
+  OFFLINE
+  DO_NOT_DISTURB
+  IN_A_MEETING
+  ON_VACATION
+  OUT_OF_OFFICE
+  FOCUSING
+}
+
 model User {
   id                  String     @id @default(uuid())
   email               String     @unique
@@ -30,6 +42,8 @@ model User {
   verificationExpiry  DateTime?
   twoFactorEnabled    Boolean    @default(false)
   twoFactorSecret     String?
+  status              UserStatus @default(ONLINE)
+  timezone            String?
   isActive            Boolean    @default(true)
   lastSeenAt          DateTime?
   createdAt           DateTime   @default(now())

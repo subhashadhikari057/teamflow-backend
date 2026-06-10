@@ -34,31 +34,12 @@ import { OAuthAuthorizationQueryDto } from './dto/oauth-authorization-query.dto'
 import { OAuthCallbackQueryDto } from './dto/oauth-callback-query.dto';
 import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
-import { appConfig } from '../../config/app.config';
 import { AuthService } from './auth.service';
-
-function setAuthCookies(res: Response, tokens: { accessToken: string; refreshToken: string }) {
-  res.cookie('access_token', tokens.accessToken, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: appConfig.isProduction,
-    maxAge: 7 * 24 * 60 * 60 * 1000,
-  });
-  res.cookie('refresh_token', tokens.refreshToken, {
-    httpOnly: true,
-    sameSite: 'strict',
-    secure: appConfig.isProduction,
-    maxAge: 30 * 24 * 60 * 60 * 1000,
-  });
-}
-
-function clearAuthCookies(res: Response) {
-  res.clearCookie('access_token');
-  res.clearCookie('refresh_token');
-}
+import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -126,6 +107,7 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthSessionResponseDto> {
+    console.log('[Auth] Refresh token endpoint hit');
     const refreshToken = (req as any).cookies?.refresh_token;
     if (!refreshToken) {
       throw new AppException(
@@ -196,6 +178,19 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   me(@CurrentUser() user: AuthUser): Promise<AuthUserResponseDto> {
     return this.authService.me(user);
+  }
+
+  @Patch('profile')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update the authenticated user profile' })
+  @ApiResponse({ status: 200, type: AuthUserResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  updateProfile(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<AuthUserResponseDto> {
+    return this.authService.updateProfile(user, dto);
   }
 
   @Get('google')

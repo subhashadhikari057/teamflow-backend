@@ -23,6 +23,7 @@ import { AuthLoginResponseDto } from './dto/auth-login-response.dto';
 import { AuthSessionResponseDto } from './dto/auth-session-response.dto';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { LoginDto } from './dto/login.dto';
 import { LogoutDto } from './dto/logout.dto';
@@ -357,6 +358,18 @@ export class AuthService {
   async me(user: AuthUser) {
     const dbUser = await this.getActiveUserOrThrow(user.id);
     return this.mapUserResponse(dbUser);
+  }
+
+  async updateProfile(user: AuthUser, dto: UpdateProfileDto) {
+    await this.getActiveUserOrThrow(user.id);
+    const updated = await this.authRepository.updateUser(user.id, {
+      ...(dto.name !== undefined && { name: dto.name }),
+      ...(dto.avatarUrl !== undefined && { avatarUrl: dto.avatarUrl }),
+      ...(dto.phone !== undefined && { phone: dto.phone }),
+      ...(dto.status !== undefined && { status: dto.status }),
+      ...(dto.timezone !== undefined && { timezone: dto.timezone }),
+    });
+    return this.mapUserResponse(updated);
   }
 
   async getGoogleAuthorizationUrl(redirectUri?: string, clientState?: string) {
