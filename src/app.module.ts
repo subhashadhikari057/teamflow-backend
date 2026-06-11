@@ -8,6 +8,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { StarterModule } from './modules/starter/starter.module';
 import { UsersModule } from './modules/users/users.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { StartupModule } from './startup/startup.module';
 
 @Module({
@@ -20,6 +21,7 @@ import { StartupModule } from './startup/startup.module';
     StarterModule,
     StartupModule,
     UsersModule,
+    WorkspacesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,5 +8,6 @@ export const appConfig = {
   },
   port: Number(process.env.PORT) || 5001,
   isProduction: process.env.NODE_ENV === 'production',
-  clientUrl: process.env.CLIENT_URL?.trim() || 'http://localhost:3000',
+  frontendBaseUrl:
+    process.env.FRONTEND_BASE_URL?.trim() || 'http://localhost:3000',
 } as const;

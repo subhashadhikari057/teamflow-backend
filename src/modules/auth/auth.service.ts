@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import { plainToInstance } from 'class-transformer';
 import { createHash, randomBytes } from 'node:crypto';
 import { AppException } from '../../common/exceptions/app.exception';
+import { appConfig } from '../../config/app.config';
 import { authConfig } from '../../config/auth.config';
 import { EmailService } from '../../infrastructure/email/email.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
@@ -281,10 +282,19 @@ export class AuthService {
         ),
       });
 
+      const resetLink = new URL('/reset-password', appConfig.frontendBaseUrl);
+      resetLink.searchParams.set('token', resetToken);
+
       await this.emailService.send({
         to: user.email,
         subject: 'Reset your Teamflow password',
-        text: `Use this password reset token: ${resetToken}`,
+        text: [
+          'We received a request to reset your Teamflow password.',
+          '',
+          `Reset Password: ${resetLink.toString()}`,
+          '',
+          `If the button does not work, use this token: ${resetToken}`,
+        ].join('\n'),
       });
     }
 
@@ -455,7 +465,7 @@ export class AuthService {
       },
     });
 
-    const session = await this.handleOAuthLogin({
+    const loginResult = await this.handleOAuthLogin({
       avatarUrl: profile.picture,
       email: profile.email,
       emailVerified: profile.email_verified,
@@ -469,7 +479,7 @@ export class AuthService {
         : undefined,
     });
 
-    return { session, redirectUri };
+    return { loginResult, redirectUri };
   }
 
   async handleGithubCallback(code: string, state: string) {
@@ -534,7 +544,7 @@ export class AuthService {
       emailVerified = primaryEmail.verified;
     }
 
-    const session = await this.handleOAuthLogin({
+    const loginResult = await this.handleOAuthLogin({
       avatarUrl: profile.avatar_url,
       email,
       emailVerified,
@@ -545,7 +555,7 @@ export class AuthService {
       providerRefreshToken: tokenResponse.refresh_token,
     });
 
-    return { session, redirectUri };
+    return { loginResult, redirectUri };
   }
 
   private async ensureRegisterInputsAvailable(dto: RegisterDto) {
@@ -692,7 +702,12 @@ export class AuthService {
         name: profile.name,
       });
 
-      return this.authSessionsService.issueSessionResponse(existingAccount.user);
+      if (existingAccount.user.twoFactorEnabled) {
+        return this.authTwoFactorService.createLoginChallenge(existingAccount.user);
+      }
+
+      const session = await this.authSessionsService.issueSessionResponse(existingAccount.user);
+      return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
     }
 
     let user = await this.authRepository.findUserByEmail(profile.email.toLowerCase());
@@ -720,7 +735,8 @@ export class AuthService {
       expiresAt: profile.providerTokenExpiresAt ?? null,
     });
 
-    return this.authSessionsService.issueSessionResponse(user);
+    const session = await this.authSessionsService.issueSessionResponse(user);
+    return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
   }
 
   private usernameFromProfile(profile: OAuthProfile) {

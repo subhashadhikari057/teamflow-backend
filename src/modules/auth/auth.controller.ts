@@ -207,11 +207,21 @@ export class AuthController {
     @Query() query: OAuthCallbackQueryDto,
     @Res() res: Response,
   ): Promise<void> {
-    let dest = `${appConfig.clientUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
+    let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { session, redirectUri } = await this.authService.handleGoogleCallback(query.code, query.state);
-      setAuthCookies(res, session.tokens);
-      dest = `${appConfig.clientUrl}${redirectUri ?? ''}`;
+      const { loginResult, redirectUri } = await this.authService.handleGoogleCallback(query.code, query.state);
+      const redirectTo = redirectUri ?? '/nomor';
+      if (loginResult.requiresTwoFactor) {
+        const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
+        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set('redirectTo', redirectTo);
+        dest = loginUrl.toString();
+      } else {
+        setAuthCookies(res, loginResult.session!.tokens);
+        const successUrl = new URL(redirectTo, appConfig.frontendBaseUrl);
+        successUrl.searchParams.set('oauth', 'google_success');
+        dest = successUrl.toString();
+      }
     } catch { /* dest stays as error redirect */ }
     res.redirect(302, dest);
   }
@@ -236,11 +246,21 @@ export class AuthController {
     @Query() query: OAuthCallbackQueryDto,
     @Res() res: Response,
   ): Promise<void> {
-    let dest = `${appConfig.clientUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
+    let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { session, redirectUri } = await this.authService.handleGithubCallback(query.code, query.state);
-      setAuthCookies(res, session.tokens);
-      dest = `${appConfig.clientUrl}${redirectUri ?? ''}`;
+      const { loginResult, redirectUri } = await this.authService.handleGithubCallback(query.code, query.state);
+      const redirectTo = redirectUri ?? '/nomor';
+      if (loginResult.requiresTwoFactor) {
+        const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
+        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set('redirectTo', redirectTo);
+        dest = loginUrl.toString();
+      } else {
+        setAuthCookies(res, loginResult.session!.tokens);
+        const successUrl = new URL(redirectTo, appConfig.frontendBaseUrl);
+        successUrl.searchParams.set('oauth', 'github_success');
+        dest = successUrl.toString();
+      }
     } catch { /* dest stays as error redirect */ }
     res.redirect(302, dest);
   }
