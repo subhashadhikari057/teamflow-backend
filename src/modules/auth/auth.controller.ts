@@ -7,10 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -39,6 +40,7 @@ import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
+import { buildSessionMetadata } from './auth-session-metadata.util';
 import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
 import { appConfig } from '../../config/app.config';
 
@@ -66,9 +68,13 @@ export class AuthController {
   @ApiResponse({ status: 403, description: 'Email not verified or account inactive' })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthLoginResponseDto> {
-    const result = await this.authService.login(dto);
+    const result = await this.authService.login(
+      dto,
+      buildSessionMetadata(req, dto),
+    );
     if (result.session) {
       setAuthCookies(res, result.session.tokens);
     }
@@ -100,9 +106,13 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
   async refresh(
     @Cookie('refresh_token') refreshToken: string | undefined,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthSessionResponseDto> {
-    const result = await this.authService.refresh(refreshToken);
+    const result = await this.authService.refresh(
+      refreshToken,
+      buildSessionMetadata(req),
+    );
     setAuthCookies(res, result.tokens);
     return result;
   }
@@ -205,11 +215,16 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
   async googleCallback(
     @Query() query: OAuthCallbackQueryDto,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGoogleCallback(query.code, query.state);
+      const { loginResult, redirectUri } = await this.authService.handleGoogleCallback(
+        query.code,
+        query.state,
+        buildSessionMetadata(req),
+      );
       const redirectTo = redirectUri ?? '/nomor';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
@@ -244,11 +259,16 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
   async githubCallback(
     @Query() query: OAuthCallbackQueryDto,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGithubCallback(query.code, query.state);
+      const { loginResult, redirectUri } = await this.authService.handleGithubCallback(
+        query.code,
+        query.state,
+        buildSessionMetadata(req),
+      );
       const redirectTo = redirectUri ?? '/nomor';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);

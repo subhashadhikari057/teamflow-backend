@@ -19,6 +19,7 @@ import { RegenerateBackupCodesDto } from './dto/regenerate-backup-codes.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { AuthRepository } from './repositories/auth.repository';
 import { AuthSessionsService } from './auth-sessions.service';
+import type { SessionMetadata } from './interfaces/auth.interface';
 
 type TwoFactorChallengePayload = {
   sub: string;
@@ -144,7 +145,10 @@ export class AuthTwoFactorService {
     );
   }
 
-  async verify(dto: VerifyTwoFactorDto): Promise<AuthLoginResponseDto> {
+  async verify(
+    dto: VerifyTwoFactorDto,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthLoginResponseDto> {
     const payload = await this.verifyChallengeToken(dto.challengeToken);
     const user = await this.getActiveUserOrThrow(payload.sub);
 
@@ -181,7 +185,10 @@ export class AuthTwoFactorService {
       );
     }
 
-    const session = await this.authSessionsService.issueSessionResponse(user);
+    const session = await this.authSessionsService.issueSessionResponse(
+      user,
+      sessionMetadata,
+    );
 
     return plainToInstance(
       AuthLoginResponseDto,

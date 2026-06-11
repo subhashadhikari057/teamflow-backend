@@ -13,7 +13,11 @@ import { AuthSessionResponseDto } from './dto/auth-session-response.dto';
 import { AuthSessionsListResponseDto } from './dto/auth-sessions-list-response.dto';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { TokenPairResponseDto } from './dto/token-pair-response.dto';
-import type { AccessTokenPayload, RefreshTokenPayload } from './interfaces/auth.interface';
+import type {
+  AccessTokenPayload,
+  RefreshTokenPayload,
+  SessionMetadata,
+} from './interfaces/auth.interface';
 import { AuthRepository } from './repositories/auth.repository';
 
 @Injectable()
@@ -23,8 +27,11 @@ export class AuthSessionsService {
     private readonly jwtService: JwtService,
   ) {}
 
-  async issueSessionResponse(user: User): Promise<AuthSessionResponseDto> {
-    const tokens = await this.issueTokenPair(user);
+  async issueSessionResponse(
+    user: User,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthSessionResponseDto> {
+    const tokens = await this.issueTokenPair(user, sessionMetadata);
 
     return plainToInstance(
       AuthSessionResponseDto,
@@ -88,7 +95,10 @@ export class AuthSessionsService {
     );
   }
 
-  private async issueTokenPair(user: User): Promise<TokenPairResponseDto> {
+  private async issueTokenPair(
+    user: User,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<TokenPairResponseDto> {
     const sessionId = randomUUID();
     const accessTokenPayload: AccessTokenPayload = {
       sub: user.id,
@@ -121,6 +131,12 @@ export class AuthSessionsService {
       userId: user.id,
       tokenHash: this.hashToken(refreshToken),
       expiresAt: this.resolveExpiryDate(authConfig.jwtRefreshExpiresIn),
+      deviceToken: sessionMetadata?.deviceToken ?? null,
+      deviceType: sessionMetadata?.deviceType ?? null,
+      deviceName: sessionMetadata?.deviceName ?? null,
+      ipAddress: sessionMetadata?.ipAddress ?? null,
+      userAgent: sessionMetadata?.userAgent ?? null,
+      location: sessionMetadata?.location ?? null,
     });
 
     return plainToInstance(

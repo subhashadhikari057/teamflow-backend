@@ -1,6 +1,6 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
@@ -13,6 +13,7 @@ import { ConfirmTwoFactorDto } from './dto/confirm-two-factor.dto';
 import { DisableTwoFactorDto } from './dto/disable-two-factor.dto';
 import { RegenerateBackupCodesDto } from './dto/regenerate-backup-codes.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
+import { buildSessionMetadata } from './auth-session-metadata.util';
 import { setAuthCookies } from './auth-cookies.util';
 
 @ApiTags('Auth 2FA')
@@ -69,9 +70,13 @@ export class AuthTwoFactorController {
   @ApiResponse({ status: 400, description: 'Invalid or expired 2FA code or challenge token' })
   async verify(
     @Body() dto: VerifyTwoFactorDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthLoginResponseDto> {
-    const result = await this.authTwoFactorService.verify(dto);
+    const result = await this.authTwoFactorService.verify(
+      dto,
+      buildSessionMetadata(req, dto),
+    );
     if (result.session) {
       setAuthCookies(res, result.session.tokens);
     }

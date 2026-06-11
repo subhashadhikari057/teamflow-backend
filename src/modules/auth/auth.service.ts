@@ -36,6 +36,7 @@ import { AuthSessionsService } from './auth-sessions.service';
 import { AuthTwoFactorService } from './auth-two-factor.service';
 import { buildPasswordResetEmail } from './emails/build-password-reset-email';
 import { buildVerificationEmail } from './emails/build-verification-email';
+import type { SessionMetadata } from './interfaces/auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -83,7 +84,10 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto): Promise<AuthLoginResponseDto> {
+  async login(
+    dto: LoginDto,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthLoginResponseDto> {
     const user = dto.identifier.includes('@')
       ? await this.authRepository.findUserByEmail(dto.identifier.toLowerCase())
       : await this.authRepository.findUserByUsername(dto.identifier);
@@ -127,7 +131,10 @@ export class AuthService {
       return this.authTwoFactorService.createLoginChallenge(user);
     }
 
-    const session = await this.authSessionsService.issueSessionResponse(user);
+    const session = await this.authSessionsService.issueSessionResponse(
+      user,
+      sessionMetadata,
+    );
 
     return plainToInstance(
       AuthLoginResponseDto,
@@ -167,7 +174,10 @@ export class AuthService {
     );
   }
 
-  async refresh(refreshToken: string | undefined): Promise<AuthSessionResponseDto> {
+  async refresh(
+    refreshToken: string | undefined,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthSessionResponseDto> {
     if (!refreshToken) {
       throw new AppException(
         AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
@@ -216,7 +226,14 @@ export class AuthService {
     }
 
     await this.authRepository.revokeSession(session.id);
-    return this.authSessionsService.issueSessionResponse(session.user);
+    return this.authSessionsService.issueSessionResponse(session.user, {
+      deviceToken: sessionMetadata?.deviceToken ?? session.deviceToken,
+      deviceType: sessionMetadata?.deviceType ?? session.deviceType,
+      deviceName: sessionMetadata?.deviceName ?? session.deviceName,
+      ipAddress: sessionMetadata?.ipAddress ?? session.ipAddress,
+      userAgent: sessionMetadata?.userAgent ?? session.userAgent,
+      location: sessionMetadata?.location ?? session.location,
+    });
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
@@ -432,7 +449,11 @@ export class AuthService {
     );
   }
 
-  async handleGoogleCallback(code: string, state: string) {
+  async handleGoogleCallback(
+    code: string,
+    state: string,
+    sessionMetadata?: SessionMetadata,
+  ) {
     this.ensureGoogleOauthConfigured();
     const { redirectUri } = await this.consumeOAuthState('google', state);
 
@@ -465,7 +486,8 @@ export class AuthService {
       },
     });
 
-    const loginResult = await this.handleOAuthLogin({
+    const loginResult = await this.handleOAuthLogin(
+      {
       avatarUrl: profile.picture,
       email: profile.email,
       emailVerified: profile.email_verified,
@@ -477,12 +499,18 @@ export class AuthService {
       providerTokenExpiresAt: tokenResponse.expires_in
         ? new Date(Date.now() + tokenResponse.expires_in * 1000)
         : undefined,
-    });
+      },
+      sessionMetadata,
+    );
 
     return { loginResult, redirectUri };
   }
 
-  async handleGithubCallback(code: string, state: string) {
+  async handleGithubCallback(
+    code: string,
+    state: string,
+    sessionMetadata?: SessionMetadata,
+  ) {
     this.ensureGithubOauthConfigured();
     const { redirectUri } = await this.consumeOAuthState('github', state);
 
@@ -544,7 +572,8 @@ export class AuthService {
       emailVerified = primaryEmail.verified;
     }
 
-    const loginResult = await this.handleOAuthLogin({
+    const loginResult = await this.handleOAuthLogin(
+      {
       avatarUrl: profile.avatar_url,
       email,
       emailVerified,
@@ -553,7 +582,9 @@ export class AuthService {
       providerAccessToken: tokenResponse.access_token,
       providerAccountId: String(profile.id),
       providerRefreshToken: tokenResponse.refresh_token,
-    });
+      },
+      sessionMetadata,
+    );
 
     return { loginResult, redirectUri };
   }
@@ -688,7 +719,10 @@ export class AuthService {
     return JSON.parse(value) as { clientState: string | null; redirectUri: string | null };
   }
 
-  private async handleOAuthLogin(profile: OAuthProfile) {
+  private async handleOAuthLogin(
+    profile: OAuthProfile,
+    sessionMetadata?: SessionMetadata,
+  ) {
     const existingAccount = await this.authRepository.findOAuthAccount(
       profile.provider,
       profile.providerAccountId,
@@ -713,7 +747,10 @@ export class AuthService {
         return this.authTwoFactorService.createLoginChallenge(existingAccount.user);
       }
 
-      const session = await this.authSessionsService.issueSessionResponse(existingAccount.user);
+      const session = await this.authSessionsService.issueSessionResponse(
+        existingAccount.user,
+        sessionMetadata,
+      );
       return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
     }
 
@@ -742,7 +779,10 @@ export class AuthService {
       expiresAt: profile.providerTokenExpiresAt ?? null,
     });
 
-    const session = await this.authSessionsService.issueSessionResponse(user);
+    const session = await this.authSessionsService.issueSessionResponse(
+      user,
+      sessionMetadata,
+    );
     return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
   }
 

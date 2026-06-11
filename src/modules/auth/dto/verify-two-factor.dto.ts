@@ -1,7 +1,8 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsString, Length, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import { SessionClientMetadataDto } from './session-client-metadata.dto';
 
-export class VerifyTwoFactorDto {
+export class VerifyTwoFactorDto extends SessionClientMetadataDto {
   @ApiProperty({ description: 'Temporary challenge token returned from login' })
   @IsString()
   @MinLength(10)

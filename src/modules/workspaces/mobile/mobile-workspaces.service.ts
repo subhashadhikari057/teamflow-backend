@@ -19,6 +19,7 @@ import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { DeclineInviteDto } from './dto/decline-invite.dto';
 import { InviteMembersDto } from './dto/invite-members.dto';
 import { WorkspaceInviteResponseDto } from './dto/invite-response.dto';
+import { WorkspaceMemberActionResponseDto } from './dto/workspace-member-action-response.dto';
 import { WorkspaceMemberResponseDto } from './dto/member-response.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
@@ -645,7 +646,7 @@ export class MobileWorkspacesService {
   async removeMember(
     workspaceId: string,
     targetUserId: string,
-  ): Promise<void> {
+  ): Promise<WorkspaceMemberActionResponseDto> {
     const targetMember = await this.membersRepository.findByWorkspaceAndUser(
       workspaceId,
       targetUserId,
@@ -667,9 +668,14 @@ export class MobileWorkspacesService {
     }
 
     await this.membersRepository.deactivate(targetMember.id);
+
+    return { message: 'Member removed successfully.' };
   }
 
-  async leaveWorkspace(userId: string, workspaceId: string): Promise<void> {
+  async leaveWorkspace(
+    userId: string,
+    workspaceId: string,
+  ): Promise<WorkspaceMemberActionResponseDto> {
     const member = await this.membersRepository.findByWorkspaceAndUser(
       workspaceId,
       userId,
@@ -679,6 +685,14 @@ export class MobileWorkspacesService {
         WORKSPACES_ERROR_CODES.MEMBER_NOT_FOUND,
         'You are not a member of this workspace',
         { status: HttpStatus.NOT_FOUND },
+      );
+    }
+
+    if (member.role === WorkspaceRole.ADMIN) {
+      throw new AppException(
+        WORKSPACES_ERROR_CODES.ADMIN_CANNOT_LEAVE,
+        'Admins cannot leave the workspace. Ask an owner to remove you or change your role first.',
+        { status: HttpStatus.FORBIDDEN },
       );
     }
 
@@ -694,6 +708,8 @@ export class MobileWorkspacesService {
     }
 
     await this.membersRepository.deactivate(member.id);
+
+    return { message: 'Left workspace successfully.' };
   }
 
   // ─── Private helpers ─────────────────────────────────────────────────────────

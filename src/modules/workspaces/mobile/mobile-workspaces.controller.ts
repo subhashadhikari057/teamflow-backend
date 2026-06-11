@@ -31,6 +31,7 @@ import { WorkspaceInviteResponseDto } from './dto/invite-response.dto';
 import { WorkspaceMemberResponseDto } from './dto/member-response.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
+import { WorkspaceMemberActionResponseDto } from './dto/workspace-member-action-response.dto';
 import { WorkspaceIdParamDto } from './dto/workspace-id-param.dto';
 import { WorkspaceInviteParamDto } from './dto/workspace-invite-param.dto';
 import { WorkspaceMemberParamDto } from './dto/workspace-member-param.dto';
@@ -275,15 +276,15 @@ export class MobileWorkspacesController {
   @Delete(':workspaceId/members/:userId')
   @UseGuards(WorkspaceRoleGuard)
   @WorkspaceRoles(WorkspaceRole.ADMIN)
-  @HttpCode(HttpStatus.NO_CONTENT)
+  @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Remove a member from a workspace (admin only)' })
-  @ApiResponse({ status: 204, description: 'Member removed' })
+  @ApiResponse({ status: 200, type: WorkspaceMemberActionResponseDto, description: 'Member removed' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 403, description: 'Insufficient role or cannot remove owner' })
   @ApiResponse({ status: 404, description: 'Member not found' })
   removeMember(
     @Param() params: WorkspaceMemberParamDto,
-  ): Promise<void> {
+  ): Promise<WorkspaceMemberActionResponseDto> {
     return this.mobileWorkspacesService.removeMember(params.workspaceId, params.userId);
   }
 
@@ -292,16 +293,15 @@ export class MobileWorkspacesController {
   @WorkspaceRoles(WorkspaceRole.GUEST)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Leave a workspace' })
-  @ApiResponse({ status: 200, description: 'Left workspace' })
+  @ApiResponse({ status: 200, type: WorkspaceMemberActionResponseDto, description: 'Left workspace' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Not a member of this workspace' })
+  @ApiResponse({ status: 403, description: 'Not a member of this workspace or admins cannot leave' })
   @ApiResponse({ status: 404, description: 'Membership not found' })
   @ApiResponse({ status: 422, description: 'Last owner cannot leave without transferring ownership' })
-  async leaveWorkspace(
+  leaveWorkspace(
     @CurrentUser() user: AuthUser,
     @Param() params: WorkspaceIdParamDto,
-  ): Promise<{ message: string }> {
-    await this.mobileWorkspacesService.leaveWorkspace(user.id, params.workspaceId);
-    return { message: 'Left workspace' };
+  ): Promise<WorkspaceMemberActionResponseDto> {
+    return this.mobileWorkspacesService.leaveWorkspace(user.id, params.workspaceId);
   }
 }
