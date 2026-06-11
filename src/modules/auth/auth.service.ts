@@ -34,6 +34,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthSessionsService } from './auth-sessions.service';
 import { AuthTwoFactorService } from './auth-two-factor.service';
+import { buildPasswordResetEmail } from './emails/build-password-reset-email';
+import { buildVerificationEmail } from './emails/build-verification-email';
 
 @Injectable()
 export class AuthService {
@@ -284,17 +286,15 @@ export class AuthService {
 
       const resetLink = new URL('/reset-password', appConfig.frontendBaseUrl);
       resetLink.searchParams.set('token', resetToken);
+      const email = buildPasswordResetEmail({
+        resetLink: resetLink.toString(),
+        token: resetToken,
+      });
 
       await this.emailService.send({
         to: user.email,
-        subject: 'Reset your Teamflow password',
-        text: [
-          'We received a request to reset your Teamflow password.',
-          '',
-          `Reset Password: ${resetLink.toString()}`,
-          '',
-          `If the button does not work, use this token: ${resetToken}`,
-        ].join('\n'),
+        subject: email.subject,
+        text: email.text,
       });
     }
 
@@ -611,10 +611,17 @@ export class AuthService {
   }
 
   private async sendVerificationEmail(user: User, token: string) {
+    const verificationLink = new URL('/verify-email', appConfig.frontendBaseUrl);
+    verificationLink.searchParams.set('token', token);
+    const email = buildVerificationEmail({
+      verificationLink: verificationLink.toString(),
+      token,
+    });
+
     await this.emailService.send({
       to: user.email,
-      subject: 'Verify your Teamflow email',
-      text: `Use this verification token: ${token}`,
+      subject: email.subject,
+      text: email.text,
     });
   }
 
