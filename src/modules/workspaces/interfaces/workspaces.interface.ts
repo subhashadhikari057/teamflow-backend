@@ -36,6 +36,11 @@ export interface WorkspaceInviteWithInviter extends WorkspaceInvite {
   };
 }
 
+export interface WorkspaceOnboardingResult {
+  invites: WorkspaceInviteWithInviter[];
+  workspace: WorkspaceWithCounts;
+}
+
 export interface WorkspaceInviteCursorInput {
   cursor?: string;
   limit: number;

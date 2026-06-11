@@ -24,11 +24,13 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { WorkspaceRoleGuard } from '../../../common/guards/workspace-role.guard';
 import type { AuthUser } from '../../../common/interfaces/auth-user.interface';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { CreateWorkspaceOnboardingDto } from './dto/create-workspace-onboarding.dto';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { DeclineInviteDto } from './dto/decline-invite.dto';
 import { InviteMembersDto } from './dto/invite-members.dto';
 import { WorkspaceInviteResponseDto } from './dto/invite-response.dto';
 import { WorkspaceMemberResponseDto } from './dto/member-response.dto';
+import { WorkspaceOnboardingResponseDto } from './dto/workspace-onboarding-response.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspaceMemberActionResponseDto } from './dto/workspace-member-action-response.dto';
@@ -98,6 +100,20 @@ export class MobileWorkspacesController {
     @Body() dto: CreateWorkspaceDto,
   ): Promise<WorkspaceResponseDto> {
     return this.mobileWorkspacesService.createWorkspace(user.id, dto);
+  }
+
+  @Post('onboarding')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Create a workspace and onboarding invites in one transaction' })
+  @ApiResponse({ status: 201, type: WorkspaceOnboardingResponseDto, description: 'Workspace onboarding created' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 422, description: 'Workspace member limit exceeded' })
+  createWorkspaceOnboarding(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreateWorkspaceOnboardingDto,
+  ): Promise<WorkspaceOnboardingResponseDto> {
+    return this.mobileWorkspacesService.createWorkspaceOnboarding(user.id, dto);
   }
 
   @Get()

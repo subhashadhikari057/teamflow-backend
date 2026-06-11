@@ -15,12 +15,14 @@ import { WorkspaceMembersRepository } from '../repositories/workspace-members.re
 import { WorkspacesRepository } from '../repositories/workspaces.repository';
 import { PLAN_MAX_MEMBERS, WORKSPACES_ERROR_CODES } from '../workspaces.types';
 import { AcceptInviteDto } from './dto/accept-invite.dto';
+import { CreateWorkspaceOnboardingDto } from './dto/create-workspace-onboarding.dto';
 import { CreateWorkspaceDto } from './dto/create-workspace.dto';
 import { DeclineInviteDto } from './dto/decline-invite.dto';
 import { InviteMembersDto } from './dto/invite-members.dto';
 import { WorkspaceInviteResponseDto } from './dto/invite-response.dto';
 import { WorkspaceMemberActionResponseDto } from './dto/workspace-member-action-response.dto';
 import { WorkspaceMemberResponseDto } from './dto/member-response.dto';
+import { WorkspaceOnboardingResponseDto } from './dto/workspace-onboarding-response.dto';
 import { UpdateMemberDto } from './dto/update-member.dto';
 import { UpdateWorkspaceDto } from './dto/update-workspace.dto';
 import { WorkspaceResponseDto } from './dto/workspace-response.dto';
@@ -73,6 +75,64 @@ export class MobileWorkspacesService {
     }
 
     return this.mapWorkspaceResponse(created);
+  }
+
+  async createWorkspaceOnboarding(
+    userId: string,
+    dto: CreateWorkspaceOnboardingDto,
+  ): Promise<WorkspaceOnboardingResponseDto> {
+    const normalizedEmails = Array.from(
+      new Set(
+        (dto.invites ?? [])
+          .map((invite) => invite.email.trim().toLowerCase())
+          .filter((email) => email.length > 0),
+      ),
+    );
+
+    if (normalizedEmails.length + 1 > PLAN_MAX_MEMBERS.FREE) {
+      throw new AppException(
+        WORKSPACES_ERROR_CODES.MEMBER_LIMIT_REACHED,
+        `Workspace member limit of ${PLAN_MAX_MEMBERS.FREE} would be exceeded`,
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+
+    const slug = await this.generateUniqueSlug(dto.name);
+    const onboarding = await this.workspacesRepository.createWorkspaceOnboarding({
+      creatorId: userId,
+      description: dto.description ?? null,
+      inviteEmails: normalizedEmails,
+      inviteRole: dto.inviteRole ?? WorkspaceRole.MEMBER,
+      logoUrl: dto.logoUrl ?? null,
+      maxMembers: PLAN_MAX_MEMBERS.FREE,
+      name: dto.name,
+      slug,
+      workspacePlan: WorkspacePlan.FREE,
+    });
+
+    for (const invite of onboarding.invites) {
+      await this.emailService.send({
+        to: invite.email,
+        subject: `You've been invited to join ${onboarding.workspace.name} on Teamflow`,
+        text: [
+          `You have been invited to join ${onboarding.workspace.name}.`,
+          ``,
+          `Accept Invite: ${appConfig.frontendBaseUrl}/invite?token=${invite.token}`,
+          ``,
+          `This invite expires in 3 days.`,
+          `If you don't have an account, you'll be asked to create one.`,
+        ].join('\n'),
+      });
+    }
+
+    return plainToInstance(
+      WorkspaceOnboardingResponseDto,
+      {
+        workspace: this.mapWorkspaceResponse(onboarding.workspace),
+        invites: onboarding.invites.map((invite) => this.mapInviteResponse(invite)),
+      },
+      { excludeExtraneousValues: true },
+    );
   }
 
   async listWorkspaces(userId: string): Promise<WorkspaceResponseDto[]> {
