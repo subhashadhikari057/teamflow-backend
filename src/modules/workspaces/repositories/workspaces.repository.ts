@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type {
+  ChannelMemberRole,
+  ChannelType,
   Prisma,
   Workspace,
   WorkspacePlan,
@@ -53,12 +55,81 @@ interface CreateWorkspaceOnboardingInput {
   workspacePlan: WorkspacePlan;
 }
 
+interface CreateWorkspaceSetupInput {
+  creatorId: string;
+  description: string | null;
+  logoUrl: string | null;
+  maxMembers: number;
+  name: string;
+  slug: string;
+  workspacePlan: WorkspacePlan;
+}
+
 @Injectable()
 export class WorkspacesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   create(data: Prisma.WorkspaceCreateInput): Promise<Workspace> {
     return this.prisma.workspace.create({ data });
+  }
+
+  async createWorkspaceSetup(
+    input: CreateWorkspaceSetupInput,
+  ): Promise<WorkspaceWithCounts> {
+    return this.prisma.$transaction(async (tx) => {
+      const workspace = await tx.workspace.create({
+        data: {
+          name: input.name,
+          slug: input.slug,
+          description: input.description,
+          logoUrl: input.logoUrl,
+          plan: input.workspacePlan,
+          maxMembers: input.maxMembers,
+          isActive: true,
+          isVerified: false,
+          creator: { connect: { id: input.creatorId } },
+        },
+      });
+
+      await tx.workspaceMember.create({
+        data: {
+          workspaceId: workspace.id,
+          userId: input.creatorId,
+          role: 'OWNER' as WorkspaceRole,
+          isActive: true,
+        },
+      });
+
+      const generalChannel = await tx.channel.create({
+        data: {
+          workspaceId: workspace.id,
+          name: 'general',
+          description: 'General workspace discussion',
+          topic: null,
+          type: 'PUBLIC' as ChannelType,
+          isReadOnly: false,
+          isArchived: false,
+          isGeneral: true,
+          createdBy: input.creatorId,
+        },
+      });
+
+      await tx.channelMember.create({
+        data: {
+          channelId: generalChannel.id,
+          userId: input.creatorId,
+          role: 'ADMIN' as ChannelMemberRole,
+          isArchived: false,
+        },
+      });
+
+      const workspaceWithCounts = await tx.workspace.findFirst({
+        where: { id: workspace.id, deletedAt: null },
+        include: workspaceInclude,
+      });
+
+      return workspaceWithCounts as WorkspaceWithCounts;
+    });
   }
 
   async createWorkspaceOnboarding(
@@ -85,6 +156,29 @@ export class WorkspacesRepository {
           userId: input.creatorId,
           role: 'OWNER' as WorkspaceRole,
           isActive: true,
+        },
+      });
+
+      const generalChannel = await tx.channel.create({
+        data: {
+          workspaceId: workspace.id,
+          name: 'general',
+          description: 'General workspace discussion',
+          topic: null,
+          type: 'PUBLIC' as ChannelType,
+          isReadOnly: false,
+          isArchived: false,
+          isGeneral: true,
+          createdBy: input.creatorId,
+        },
+      });
+
+      await tx.channelMember.create({
+        data: {
+          channelId: generalChannel.id,
+          userId: input.creatorId,
+          role: 'ADMIN' as ChannelMemberRole,
+          isArchived: false,
         },
       });
 

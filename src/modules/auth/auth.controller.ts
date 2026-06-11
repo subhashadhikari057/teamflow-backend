@@ -38,6 +38,7 @@ import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetCurrentWorkspaceDto } from './dto/set-current-workspace.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
 import { buildSessionMetadata } from './auth-session-metadata.util';
@@ -181,6 +182,21 @@ export class AuthController {
     return this.authService.me(user);
   }
 
+  @Patch('current-workspace')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set the current workspace for the authenticated session' })
+  @ApiResponse({ status: 200, type: AuthUserResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 403, description: 'Not a member of the selected workspace' })
+  setCurrentWorkspace(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetCurrentWorkspaceDto,
+  ): Promise<AuthUserResponseDto> {
+    return this.authService.setCurrentWorkspace(user, dto);
+  }
+
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -225,7 +241,7 @@ export class AuthController {
         query.state,
         buildSessionMetadata(req),
       );
-      const redirectTo = redirectUri ?? '/nomor';
+      const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
         loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
@@ -269,7 +285,7 @@ export class AuthController {
         query.state,
         buildSessionMetadata(req),
       );
-      const redirectTo = redirectUri ?? '/nomor';
+      const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
         loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);

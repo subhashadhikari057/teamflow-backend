@@ -55,7 +55,9 @@ model User {
   passwordResets       PasswordReset[]
   oauthAccounts        OAuthAccount[]
   createdWorkspaces    Workspace[]           @relation("WorkspaceCreator")
+  createdChannels      Channel[]             @relation("ChannelCreator")
   workspaceMemberships WorkspaceMember[]
+  channelMembers       ChannelMember[]
   sentInvites          WorkspaceInvite[]     @relation("InviteSender")
   revokedInvites       WorkspaceInvite[]     @relation("InviteRevoker")
 
@@ -68,6 +70,7 @@ model User {
 model Session {
   id           String   @id @default(uuid())
   userId       String
+  currentWorkspaceId String?
   tokenHash    String   @unique
   expiresAt    DateTime
   isRevoked    Boolean  @default(false)
@@ -81,8 +84,10 @@ model Session {
   createdAt    DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentWorkspace Workspace? @relation("SessionCurrentWorkspace", fields: [currentWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([currentWorkspaceId])
   @@index([tokenHash])
   @@index([expiresAt])
   @@map("sessions")
@@ -138,6 +143,16 @@ enum InviteStatus {
   REVOKED
 }
 
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ChannelMemberRole {
+  ADMIN
+  MEMBER
+}
+
 model Workspace {
   id                 String        @id @default(uuid())
   name               String
@@ -157,6 +172,8 @@ model Workspace {
   creator User              @relation("WorkspaceCreator", fields: [createdBy], references: [id])
   members WorkspaceMember[]
   invites WorkspaceInvite[]
+  channels Channel[]
+  currentWorkspaceSessions Session[] @relation("SessionCurrentWorkspace")
 
   @@index([slug])
   @@index([createdBy])
@@ -211,6 +228,51 @@ model WorkspaceInvite {
   @@index([email])
   @@index([token])
   @@map("workspace_invites")
+}
+
+model Channel {
+  id          String      @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  topic       String?
+  type        ChannelType @default(PUBLIC)
+  isReadOnly  Boolean     @default(false)
+  isArchived  Boolean     @default(false)
+  isGeneral   Boolean     @default(false)
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator   User            @relation("ChannelCreator", fields: [createdBy], references: [id])
+  members   ChannelMember[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([createdBy])
+  @@index([deletedAt])
+  @@map("channels")
+}
+
+model ChannelMember {
+  id         String            @id @default(uuid())
+  channelId  String
+  userId     String
+  role       ChannelMemberRole @default(MEMBER)
+  isArchived Boolean           @default(false)
+  lastReadAt DateTime?
+  joinedAt   DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([channelId])
+  @@index([userId])
+  @@map("channel_members")
 }
 
 model OAuthAccount {

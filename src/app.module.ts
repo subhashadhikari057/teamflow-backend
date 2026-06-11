@@ -6,6 +6,7 @@ import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ChannelsModule } from './modules/channels/channels.module';
 import { StarterModule } from './modules/starter/starter.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
@@ -15,6 +16,7 @@ import { StartupModule } from './startup/startup.module';
   imports: [
     JwtModule.register({}),
     AuthModule,
+    ChannelsModule,
     EmailModule,
     PrismaModule,
     RedisModule,

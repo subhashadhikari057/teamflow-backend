@@ -16,6 +16,7 @@ export interface RefreshTokenPayload {
 }
 
 export interface SessionMetadata {
+  currentWorkspaceId?: string | null;
   deviceName?: string | null;
   deviceToken?: string | null;
   deviceType?: string | null;

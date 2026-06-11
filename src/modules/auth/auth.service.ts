@@ -31,12 +31,14 @@ import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetCurrentWorkspaceDto } from './dto/set-current-workspace.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthSessionsService } from './auth-sessions.service';
 import { AuthTwoFactorService } from './auth-two-factor.service';
 import { buildPasswordResetEmail } from './emails/build-password-reset-email';
 import { buildVerificationEmail } from './emails/build-verification-email';
 import type { SessionMetadata } from './interfaces/auth.interface';
+import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +49,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly authSessionsService: AuthSessionsService,
     private readonly authTwoFactorService: AuthTwoFactorService,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthActionResponseDto> {
@@ -227,6 +230,8 @@ export class AuthService {
 
     await this.authRepository.revokeSession(session.id);
     return this.authSessionsService.issueSessionResponse(session.user, {
+      currentWorkspaceId:
+        sessionMetadata?.currentWorkspaceId ?? session.currentWorkspaceId,
       deviceToken: sessionMetadata?.deviceToken ?? session.deviceToken,
       deviceType: sessionMetadata?.deviceType ?? session.deviceType,
       deviceName: sessionMetadata?.deviceName ?? session.deviceName,
@@ -396,8 +401,26 @@ export class AuthService {
   }
 
   async me(user: AuthUser) {
-    const dbUser = await this.getActiveUserOrThrow(user.id);
-    return this.mapUserResponse(dbUser);
+    const session = await this.authRepository.findSessionContextById(user.sessionId);
+
+    if (!session || session.userId !== user.id || session.isRevoked) {
+      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+
+    if (!session.user.isActive || session.user.deletedAt) {
+      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      session.currentWorkspaceId,
+    );
+
+    return this.mapUserResponse(session.user, currentWorkspace);
   }
 
   async updateProfile(user: AuthUser, dto: UpdateProfileDto) {
@@ -409,7 +432,47 @@ export class AuthService {
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.timezone !== undefined && { timezone: dto.timezone }),
     });
-    return this.mapUserResponse(updated);
+    const session = await this.authRepository.findSessionContextById(user.sessionId);
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      session?.currentWorkspaceId ?? null,
+    );
+    return this.mapUserResponse(updated, currentWorkspace);
+  }
+
+  async setCurrentWorkspace(
+    user: AuthUser,
+    dto: SetCurrentWorkspaceDto,
+  ): Promise<AuthUserResponseDto> {
+    const session = await this.authRepository.findSessionContextById(user.sessionId);
+
+    if (!session || session.userId !== user.id || session.isRevoked) {
+      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
+        status: HttpStatus.NOT_FOUND,
+      });
+    }
+
+    const membership = await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+      dto.workspaceId,
+      user.id,
+    );
+
+    if (!membership || !membership.isActive) {
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'You are not an active member of this workspace',
+        { status: HttpStatus.FORBIDDEN },
+      );
+    }
+
+    const updatedSession = await this.authRepository.updateSession(user.sessionId, {
+      currentWorkspaceId: dto.workspaceId,
+    });
+
+    return this.mapUserResponse(
+      updatedSession.user,
+      updatedSession.currentWorkspace ?? null,
+    );
   }
 
   async getGoogleAuthorizationUrl(redirectUri?: string, clientState?: string) {
@@ -611,10 +674,36 @@ export class AuthService {
     }
   }
 
-  private mapUserResponse(user: User) {
-    return plainToInstance(AuthUserResponseDto, user, {
+  private mapUserResponse(
+    user: User,
+    currentWorkspace?: { id: string; slug: string; name: string } | null,
+  ) {
+    return plainToInstance(AuthUserResponseDto, {
+      ...user,
+      currentWorkspace: currentWorkspace ?? null,
+    }, {
       excludeExtraneousValues: true,
     });
+  }
+
+  private async resolveCurrentWorkspaceForUser(
+    userId: string,
+    workspaceId: string | null | undefined,
+  ) {
+    if (!workspaceId) {
+      return null;
+    }
+
+    const membership = await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+      workspaceId,
+      userId,
+    );
+
+    if (!membership || !membership.isActive) {
+      return null;
+    }
+
+    return this.authRepository.findWorkspaceSummaryById(workspaceId);
   }
 
   private async getActiveUserOrThrow(userId: string) {

@@ -4,8 +4,6 @@ import {
   type PasswordReset,
   type Prisma,
   type TwoFactorBackupCode,
-  type Session,
-  type User,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 
@@ -31,6 +29,17 @@ export class AuthRepository {
     });
   }
 
+  findWorkspaceSummaryById(id: string) {
+    return this.prisma.workspace.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+      },
+    });
+  }
+
   createUser(data: Prisma.UserCreateInput) {
     return this.prisma.user.create({ data });
   }
@@ -46,10 +55,35 @@ export class AuthRepository {
     return this.prisma.session.create({ data });
   }
 
+  findSessionContextById(id: string) {
+    return this.prisma.session.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
+    });
+  }
+
   findSessionByHash(tokenHash: string) {
     return this.prisma.session.findFirst({
       where: { tokenHash },
-      include: { user: true },
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 
@@ -81,6 +115,23 @@ export class AuthRepository {
     return this.prisma.session.update({
       where: { id },
       data: { lastActiveAt: new Date() },
+    });
+  }
+
+  updateSession(id: string, data: Prisma.SessionUncheckedUpdateInput) {
+    return this.prisma.session.update({
+      where: { id },
+      data,
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 

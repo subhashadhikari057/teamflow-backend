@@ -129,6 +129,7 @@ export class AuthSessionsService {
     await this.authRepository.createSession({
       id: sessionId,
       userId: user.id,
+      currentWorkspaceId: sessionMetadata?.currentWorkspaceId ?? null,
       tokenHash: this.hashToken(refreshToken),
       expiresAt: this.resolveExpiryDate(authConfig.jwtRefreshExpiresIn),
       deviceToken: sessionMetadata?.deviceToken ?? null,

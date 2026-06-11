@@ -1,6 +1,29 @@
 import { GlobalRole, UserStatus } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
+
+export class AuthCurrentWorkspaceResponseDto {
+  @ApiProperty({
+    description: 'Current workspace ID',
+    example: '550e8400-e29b-41d4-a716-446655440000',
+  })
+  @Expose()
+  id!: string;
+
+  @ApiProperty({
+    description: 'Current workspace slug',
+    example: 'acme-corp',
+  })
+  @Expose()
+  slug!: string;
+
+  @ApiProperty({
+    description: 'Current workspace name',
+    example: 'Acme Corp',
+  })
+  @Expose()
+  name!: string;
+}
 
 export class AuthUserResponseDto {
   @ApiProperty({
@@ -102,4 +125,12 @@ export class AuthUserResponseDto {
   })
   @Expose()
   createdAt!: Date;
+
+  @ApiPropertyOptional({
+    description: 'Current workspace for this session',
+    type: AuthCurrentWorkspaceResponseDto,
+  })
+  @Expose()
+  @Type(() => AuthCurrentWorkspaceResponseDto)
+  currentWorkspace?: AuthCurrentWorkspaceResponseDto | null;
 }

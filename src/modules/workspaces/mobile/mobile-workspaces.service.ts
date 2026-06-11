@@ -5,6 +5,9 @@ import { randomUUID } from 'node:crypto';
 import { appConfig } from '../../../config/app.config';
 import { AppException } from '../../../common/exceptions/app.exception';
 import { EmailService } from '../../../infrastructure/email/email.service';
+import { ChannelMemberRole } from '@prisma/client';
+import { ChannelMembersRepository } from '../../channels/repositories/channel-members.repository';
+import { ChannelsRepository } from '../../channels/repositories/channels.repository';
 import type {
   WorkspaceInviteWithInviter,
   WorkspaceMemberWithUser,
@@ -33,6 +36,8 @@ export class MobileWorkspacesService {
     private readonly workspacesRepository: WorkspacesRepository,
     private readonly membersRepository: WorkspaceMembersRepository,
     private readonly invitesRepository: WorkspaceInvitesRepository,
+    private readonly channelsRepository: ChannelsRepository,
+    private readonly channelMembersRepository: ChannelMembersRepository,
     private readonly emailService: EmailService,
   ) {}
 
@@ -44,37 +49,17 @@ export class MobileWorkspacesService {
   ): Promise<WorkspaceResponseDto> {
     const slug = await this.generateUniqueSlug(dto.name);
 
-    const workspace = await this.workspacesRepository.create({
+    const workspace = await this.workspacesRepository.createWorkspaceSetup({
       name: dto.name,
       slug,
       description: dto.description ?? null,
       logoUrl: dto.logoUrl ?? null,
-      plan: WorkspacePlan.FREE,
+      workspacePlan: WorkspacePlan.FREE,
       maxMembers: PLAN_MAX_MEMBERS.FREE,
-      isActive: true,
-      isVerified: false,
-      creator: { connect: { id: userId } },
+      creatorId: userId,
     });
 
-    await this.membersRepository.create({
-      workspaceId: workspace.id,
-      userId,
-      role: WorkspaceRole.OWNER,
-      isActive: true,
-    });
-
-    // TODO: When channels module is implemented, auto-create #general channel and add creator
-
-    const created = await this.workspacesRepository.findById(workspace.id);
-    if (!created) {
-      throw new AppException(
-        WORKSPACES_ERROR_CODES.WORKSPACE_NOT_FOUND,
-        'Workspace not found after creation',
-        { status: HttpStatus.NOT_FOUND },
-      );
-    }
-
-    return this.mapWorkspaceResponse(created);
+    return this.mapWorkspaceResponse(workspace);
   }
 
   async createWorkspaceOnboarding(
@@ -519,6 +504,27 @@ export class MobileWorkspacesService {
       isActive: true,
     });
 
+    const generalChannel = await this.channelsRepository.findGeneralByWorkspace(
+      invite.workspaceId,
+    );
+
+    if (generalChannel) {
+      const existingGeneralMember =
+        await this.channelMembersRepository.findByChannelAndUserRaw(
+          generalChannel.id,
+          userId,
+        );
+
+      if (!existingGeneralMember) {
+        await this.channelMembersRepository.create({
+          channelId: generalChannel.id,
+          userId,
+          role: ChannelMemberRole.MEMBER,
+          isArchived: false,
+        });
+      }
+    }
+
     await this.invitesRepository.update(invite.id, {
       status: InviteStatus.ACCEPTED,
       acceptedAt: new Date(),
@@ -728,6 +734,10 @@ export class MobileWorkspacesService {
     }
 
     await this.membersRepository.deactivate(targetMember.id);
+    await this.channelMembersRepository.removeAllByWorkspaceAndUser(
+      workspaceId,
+      targetUserId,
+    );
 
     return { message: 'Member removed successfully.' };
   }
@@ -768,6 +778,10 @@ export class MobileWorkspacesService {
     }
 
     await this.membersRepository.deactivate(member.id);
+    await this.channelMembersRepository.removeAllByWorkspaceAndUser(
+      workspaceId,
+      userId,
+    );
 
     return { message: 'Left workspace successfully.' };
   }
