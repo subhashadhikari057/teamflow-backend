@@ -1,6 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { ChannelType } from '@prisma/client';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
+import { ChannelMemberResponseDto } from './channel-member-response.dto';
 
 export class ChannelResponseDto {
   @ApiProperty({ description: 'Channel ID', example: '550e8400-e29b-41d4-a716-446655440000' })
@@ -54,4 +55,12 @@ export class ChannelResponseDto {
   @ApiProperty({ description: 'Creation timestamp', example: '2026-06-11T12:00:00.000Z' })
   @Expose()
   createdAt!: Date;
+
+  @ApiPropertyOptional({
+    description: 'Channel members returned when requested with the member query parameter',
+    type: [ChannelMemberResponseDto],
+  })
+  @Expose()
+  @Type(() => ChannelMemberResponseDto)
+  members?: ChannelMemberResponseDto[];
 }

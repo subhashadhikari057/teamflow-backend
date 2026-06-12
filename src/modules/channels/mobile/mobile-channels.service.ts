@@ -12,6 +12,7 @@ import { ChannelsRepository } from '../repositories/channels.repository';
 import { CHANNELS_ERROR_CODES } from '../channels.types';
 import { AddChannelMemberDto } from './dto/add-channel-member.dto';
 import { ChannelActionResponseDto } from './dto/channel-action-response.dto';
+import { ChannelDetailQueryDto } from './dto/channel-detail-query.dto';
 import { ChannelMemberResponseDto } from './dto/channel-member-response.dto';
 import { ChannelResponseDto } from './dto/channel-response.dto';
 import { CreateChannelDto } from './dto/create-channel.dto';
@@ -98,6 +99,7 @@ export class MobileChannelsService {
     userId: string,
     workspaceId: string,
     channelId: string,
+    query: ChannelDetailQueryDto,
   ): Promise<ChannelResponseDto> {
     const channel = await this.channelsRepository.findByWorkspaceAndIdForUser(
       workspaceId,
@@ -121,7 +123,11 @@ export class MobileChannelsService {
       );
     }
 
-    return this.mapChannelResponse(channel);
+    const members = query.member
+      ? await this.channelMembersRepository.findAllByChannel(channelId)
+      : undefined;
+
+    return this.mapChannelResponse(channel, members);
   }
 
   async updateChannel(
@@ -575,7 +581,10 @@ export class MobileChannelsService {
     }
   }
 
-  private mapChannelResponse(channel: ChannelWithCurrentMember): ChannelResponseDto {
+  private mapChannelResponse(
+    channel: ChannelWithCurrentMember,
+    members?: ChannelMemberWithUser[],
+  ): ChannelResponseDto {
     return plainToInstance(
       ChannelResponseDto,
       {
@@ -592,6 +601,7 @@ export class MobileChannelsService {
         isMember: channel.members.length > 0,
         createdBy: channel.createdBy,
         createdAt: channel.createdAt,
+        members: members?.map((member) => this.mapChannelMemberResponse(member)),
       },
       { excludeExtraneousValues: true },
     );

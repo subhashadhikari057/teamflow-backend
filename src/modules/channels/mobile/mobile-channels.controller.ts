@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -26,6 +27,7 @@ import type { AuthUser } from '../../../common/interfaces/auth-user.interface';
 import { WorkspaceIdParamDto } from '../../workspaces/mobile/dto/workspace-id-param.dto';
 import { MobileChannelsService } from './mobile-channels.service';
 import { AddChannelMemberDto } from './dto/add-channel-member.dto';
+import { ChannelDetailQueryDto } from './dto/channel-detail-query.dto';
 import { ChannelActionResponseDto } from './dto/channel-action-response.dto';
 import { ChannelIdParamDto } from './dto/channel-id-param.dto';
 import { ChannelMemberParamDto } from './dto/channel-member-param.dto';
@@ -76,8 +78,14 @@ export class MobileChannelsController {
   getChannel(
     @CurrentUser() user: AuthUser,
     @Param() params: ChannelIdParamDto,
+    @Query() query: ChannelDetailQueryDto,
   ): Promise<ChannelResponseDto> {
-    return this.mobileChannelsService.getChannel(user.id, params.workspaceId, params.channelId);
+    return this.mobileChannelsService.getChannel(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+      query,
+    );
   }
 
   @Patch(':channelId')
