@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { InviteStatus, WorkspacePlan, WorkspaceRole } from '@prisma/client';
+import {
+  InviteStatus,
+  WorkspacePlan,
+  WorkspaceRole,
+  type WorkspaceInvite,
+} from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { randomUUID } from 'node:crypto';
 import { appConfig } from '../../../config/app.config';
@@ -239,9 +244,31 @@ export class MobileWorkspacesService {
       );
     }
 
+    const normalizedEmails = Array.from(
+      new Set(
+        dto.emails
+          .map((email) => email.trim().toLowerCase())
+          .filter((email) => email.length > 0),
+      ),
+    );
+
+    const existingInvitesByEmail = new Map<string, WorkspaceInvite>();
+    for (const email of normalizedEmails) {
+      const existingInvite = await this.invitesRepository.findByWorkspaceAndEmail(
+        workspaceId,
+        email,
+      );
+      if (existingInvite) {
+        existingInvitesByEmail.set(email, existingInvite);
+      }
+    }
+
     const { activeMembers, pendingInvites } =
       await this.membersRepository.countActiveAndPendingInvites(workspaceId);
-    const newCount = dto.emails.length;
+    const newCount = normalizedEmails.filter(
+      (email) =>
+        existingInvitesByEmail.get(email)?.status !== InviteStatus.PENDING,
+    ).length;
     if (activeMembers + pendingInvites + newCount > workspace.maxMembers) {
       throw new AppException(
         WORKSPACES_ERROR_CODES.MEMBER_LIMIT_REACHED,
@@ -252,24 +279,26 @@ export class MobileWorkspacesService {
 
     const createdInvites: WorkspaceInviteWithInviter[] = [];
 
-    for (const email of dto.emails) {
-      const existingInvite = await this.invitesRepository.findPendingByEmail(
-        workspaceId,
-        email,
-      );
-      if (existingInvite) {
-        await this.invitesRepository.delete(existingInvite.id);
-      }
-
-      const invite = await this.invitesRepository.create({
-        workspaceId,
-        email,
-        role: dto.role,
-        token: randomUUID(),
-        invitedBy: userId,
-        status: InviteStatus.PENDING,
-        expiresAt: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000),
-      });
+    for (const email of normalizedEmails) {
+      const token = randomUUID();
+      const expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      const existingInvite = existingInvitesByEmail.get(email);
+      const invite = existingInvite
+        ? await this.invitesRepository.resetForReinvite(existingInvite.id, {
+            expiresAt,
+            invitedBy: userId,
+            role: dto.role,
+            token,
+          })
+        : await this.invitesRepository.create({
+            workspaceId,
+            email,
+            role: dto.role,
+            token,
+            invitedBy: userId,
+            status: InviteStatus.PENDING,
+            expiresAt,
+          });
 
       await this.emailService.send({
         to: email,
@@ -485,11 +514,11 @@ export class MobileWorkspacesService {
       );
     }
 
-    const existingMember = await this.membersRepository.findByWorkspaceAndUser(
+    const existingMember = await this.membersRepository.findByWorkspaceAndUserRaw(
       invite.workspaceId,
       userId,
     );
-    if (existingMember) {
+    if (existingMember?.isActive) {
       throw new AppException(
         WORKSPACES_ERROR_CODES.INVITE_ALREADY_PROCESSED,
         'You are already a member of this workspace',
@@ -497,12 +526,19 @@ export class MobileWorkspacesService {
       );
     }
 
-    await this.membersRepository.create({
-      workspaceId: invite.workspaceId,
-      userId,
-      role: invite.role,
-      isActive: true,
-    });
+    if (existingMember) {
+      await this.membersRepository.update(existingMember.id, {
+        isActive: true,
+        role: invite.role,
+      });
+    } else {
+      await this.membersRepository.create({
+        workspaceId: invite.workspaceId,
+        userId,
+        role: invite.role,
+        isActive: true,
+      });
+    }
 
     const generalChannel = await this.channelsRepository.findGeneralByWorkspace(
       invite.workspaceId,
@@ -529,8 +565,6 @@ export class MobileWorkspacesService {
       status: InviteStatus.ACCEPTED,
       acceptedAt: new Date(),
     });
-
-    // TODO: Auto-add user to #general channel when channels module is implemented
 
     const updated = await this.workspacesRepository.findById(invite.workspaceId);
     if (!updated) {

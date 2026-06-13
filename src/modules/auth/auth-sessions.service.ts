@@ -19,12 +19,14 @@ import type {
   SessionMetadata,
 } from './interfaces/auth.interface';
 import { AuthRepository } from './repositories/auth.repository';
+import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 
 @Injectable()
 export class AuthSessionsService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
   ) {}
 
   async issueSessionResponse(
@@ -100,6 +102,10 @@ export class AuthSessionsService {
     sessionMetadata?: SessionMetadata,
   ): Promise<TokenPairResponseDto> {
     const sessionId = randomUUID();
+    const currentWorkspaceId = await this.resolveCurrentWorkspaceId(
+      user.id,
+      sessionMetadata?.currentWorkspaceId,
+    );
     const accessTokenPayload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
@@ -129,7 +135,7 @@ export class AuthSessionsService {
     await this.authRepository.createSession({
       id: sessionId,
       userId: user.id,
-      currentWorkspaceId: sessionMetadata?.currentWorkspaceId ?? null,
+      currentWorkspaceId,
       tokenHash: this.hashToken(refreshToken),
       expiresAt: this.resolveExpiryDate(authConfig.jwtRefreshExpiresIn),
       deviceToken: sessionMetadata?.deviceToken ?? null,
@@ -150,6 +156,35 @@ export class AuthSessionsService {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  private async resolveCurrentWorkspaceId(
+    userId: string,
+    requestedWorkspaceId?: string | null,
+  ): Promise<string | null> {
+    if (requestedWorkspaceId) {
+      const membership =
+        await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+          requestedWorkspaceId,
+          userId,
+        );
+
+      return membership?.isActive ? requestedWorkspaceId : null;
+    }
+
+    const latestWorkspaceSession =
+      await this.authRepository.findLatestWorkspaceSelectionSession(userId);
+
+    if (!latestWorkspaceSession?.currentWorkspaceId) {
+      return null;
+    }
+
+    const membership = await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+      latestWorkspaceSession.currentWorkspaceId,
+      userId,
+    );
+
+    return membership?.isActive ? latestWorkspaceSession.currentWorkspaceId : null;
   }
 
   private hashToken(token: string) {

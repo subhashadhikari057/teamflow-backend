@@ -3,6 +3,24 @@ import { ChannelType } from '@prisma/client';
 import { Expose, Type } from 'class-transformer';
 import { ChannelMemberResponseDto } from './channel-member-response.dto';
 
+export class ChannelCreatorResponseDto {
+  @ApiProperty({ description: 'Creator user ID', example: '550e8400-e29b-41d4-a716-446655440002' })
+  @Expose()
+  id!: string;
+
+  @ApiPropertyOptional({ description: 'Creator full name', example: 'Alice Smith', nullable: true })
+  @Expose()
+  name?: string | null;
+
+  @ApiProperty({ description: 'Creator username', example: 'alice.smith' })
+  @Expose()
+  username!: string;
+
+  @ApiPropertyOptional({ description: 'Creator avatar URL', example: 'https://example.com/avatar.png', nullable: true })
+  @Expose()
+  avatarUrl?: string | null;
+}
+
 export class ChannelResponseDto {
   @ApiProperty({ description: 'Channel ID', example: '550e8400-e29b-41d4-a716-446655440000' })
   @Expose()
@@ -51,6 +69,15 @@ export class ChannelResponseDto {
   @ApiProperty({ description: 'User ID of the creator', example: '550e8400-e29b-41d4-a716-446655440002' })
   @Expose()
   createdBy!: string;
+
+  @ApiPropertyOptional({
+    description: 'Creator profile, included even if the creator is no longer a channel member',
+    type: ChannelCreatorResponseDto,
+    nullable: true,
+  })
+  @Expose()
+  @Type(() => ChannelCreatorResponseDto)
+  creator?: ChannelCreatorResponseDto | null;
 
   @ApiProperty({ description: 'Creation timestamp', example: '2026-06-11T12:00:00.000Z' })
   @Expose()

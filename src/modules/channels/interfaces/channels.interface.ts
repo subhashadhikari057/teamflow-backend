@@ -4,6 +4,12 @@ export interface ChannelWithCurrentMember extends Channel {
   _count: {
     members: number;
   };
+  creator: {
+    id: string;
+    name: string | null;
+    username: string;
+    avatarUrl: string | null;
+  };
   members: ChannelMember[];
 }
 

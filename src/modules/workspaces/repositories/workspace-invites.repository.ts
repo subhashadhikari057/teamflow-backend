@@ -47,6 +47,15 @@ export class WorkspaceInvitesRepository {
     });
   }
 
+  findByWorkspaceAndEmail(
+    workspaceId: string,
+    email: string,
+  ): Promise<WorkspaceInvite | null> {
+    return this.prisma.workspaceInvite.findFirst({
+      where: { workspaceId, email },
+    });
+  }
+
   findPendingByWorkspace(
     workspaceId: string,
   ): Promise<WorkspaceInviteWithInviter[]> {
@@ -62,6 +71,33 @@ export class WorkspaceInvitesRepository {
     data: Prisma.WorkspaceInviteUpdateInput,
   ): Promise<WorkspaceInvite> {
     return this.prisma.workspaceInvite.update({ where: { id }, data });
+  }
+
+  resetForReinvite(
+    id: string,
+    data: {
+      expiresAt: Date;
+      invitedBy: string;
+      role: WorkspaceInvite['role'];
+      token: string;
+    },
+  ): Promise<WorkspaceInvite> {
+    return this.prisma.workspaceInvite.update({
+      where: { id },
+      data: {
+        acceptedAt: null,
+        declinedAt: null,
+        expiresAt: data.expiresAt,
+        invitedBy: data.invitedBy,
+        lastResentAt: null,
+        resendCount: 0,
+        revokedAt: null,
+        revokedBy: null,
+        role: data.role,
+        status: InviteStatus.PENDING,
+        token: data.token,
+      },
+    });
   }
 
   async delete(id: string): Promise<void> {

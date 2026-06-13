@@ -11,6 +11,14 @@ const channelWithCurrentMemberInclude = (userId: string) =>
         members: true,
       },
     },
+    creator: {
+      select: {
+        id: true,
+        name: true,
+        username: true,
+        avatarUrl: true,
+      },
+    },
     members: {
       where: { userId },
       take: 1,

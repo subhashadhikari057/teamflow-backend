@@ -600,6 +600,7 @@ export class MobileChannelsService {
         memberCount: channel._count.members,
         isMember: channel.members.length > 0,
         createdBy: channel.createdBy,
+        creator: channel.creator,
         createdAt: channel.createdAt,
         members: members?.map((member) => this.mapChannelMemberResponse(member)),
       },

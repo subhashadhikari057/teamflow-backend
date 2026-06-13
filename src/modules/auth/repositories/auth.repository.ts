@@ -104,6 +104,19 @@ export class AuthRepository {
     });
   }
 
+  findLatestWorkspaceSelectionSession(userId: string) {
+    return this.prisma.session.findFirst({
+      where: {
+        userId,
+        currentWorkspaceId: { not: null },
+      },
+      orderBy: [{ lastActiveAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        currentWorkspaceId: true,
+      },
+    });
+  }
+
   revokeSession(id: string) {
     return this.prisma.session.update({
       where: { id },

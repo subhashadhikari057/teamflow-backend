@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   GlobalRole,
   OAuthProvider,
+  WorkspaceRole,
   type OAuthAccount,
   type PasswordReset,
   type User,
@@ -469,9 +470,14 @@ export class AuthService {
       currentWorkspaceId: dto.workspaceId,
     });
 
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      updatedSession.currentWorkspaceId,
+    );
+
     return this.mapUserResponse(
       updatedSession.user,
-      updatedSession.currentWorkspace ?? null,
+      currentWorkspace,
     );
   }
 
@@ -676,7 +682,12 @@ export class AuthService {
 
   private mapUserResponse(
     user: User,
-    currentWorkspace?: { id: string; slug: string; name: string } | null,
+    currentWorkspace?: {
+      id: string;
+      slug: string;
+      name: string;
+      role: WorkspaceRole;
+    } | null,
   ) {
     return plainToInstance(AuthUserResponseDto, {
       ...user,
@@ -703,7 +714,16 @@ export class AuthService {
       return null;
     }
 
-    return this.authRepository.findWorkspaceSummaryById(workspaceId);
+    const workspace = await this.authRepository.findWorkspaceSummaryById(workspaceId);
+
+    if (!workspace) {
+      return null;
+    }
+
+    return {
+      ...workspace,
+      role: membership.role,
+    };
   }
 
   private async getActiveUserOrThrow(userId: string) {

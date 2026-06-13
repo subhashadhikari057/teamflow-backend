@@ -1,4 +1,4 @@
-import { GlobalRole, UserStatus } from '@prisma/client';
+import { GlobalRole, UserStatus, WorkspaceRole } from '@prisma/client';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
@@ -23,6 +23,14 @@ export class AuthCurrentWorkspaceResponseDto {
   })
   @Expose()
   name!: string;
+
+  @ApiProperty({
+    description: 'Role of the current user in this workspace',
+    enum: WorkspaceRole,
+    example: WorkspaceRole.MEMBER,
+  })
+  @Expose()
+  role!: WorkspaceRole;
 }
 
 export class AuthUserResponseDto {
