@@ -41,6 +41,18 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.quit();
   }
 
+  async set(key: string, value: string, ttlSeconds = redisConfig.defaultTtlSeconds) {
+    await this.client.set(key, value, { EX: ttlSeconds });
+  }
+
+  async get(key: string) {
+    return this.client.get(key);
+  }
+
+  async del(key: string) {
+    await this.client.del(key);
+  }
+
   getClient() {
     return this.client;
   }

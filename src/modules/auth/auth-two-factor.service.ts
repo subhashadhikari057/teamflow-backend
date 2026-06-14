@@ -436,22 +436,21 @@ export class AuthTwoFactorService {
   }
 
   private async cacheBackupCodes(userId: string, codes: string[]) {
-    await this.redisService.getClient().set(
+    await this.redisService.set(
       `${BACKUP_CODES_REDIS_PREFIX}:${userId}`,
       JSON.stringify(codes),
-      { EX: 60 * 15 },
     );
   }
 
   private async getCachedBackupCodes(userId: string) {
-    const value = await this.redisService
-      .getClient()
-      .get(`${BACKUP_CODES_REDIS_PREFIX}:${userId}`);
+    const value = await this.redisService.get(
+      `${BACKUP_CODES_REDIS_PREFIX}:${userId}`,
+    );
 
     return value ? (JSON.parse(value) as string[]) : [];
   }
 
   private async clearBackupCodesCache(userId: string) {
-    await this.redisService.getClient().del(`${BACKUP_CODES_REDIS_PREFIX}:${userId}`);
+    await this.redisService.del(`${BACKUP_CODES_REDIS_PREFIX}:${userId}`);
   }
 }

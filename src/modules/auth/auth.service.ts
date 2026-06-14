@@ -800,12 +800,10 @@ export class AuthService {
   ) {
     const state = this.generateOpaqueToken();
     const key = `${AUTH_OAUTH_STATE_PREFIX}:${provider}:${state}`;
-    const client = this.redisService.getClient();
-
-    await client.set(
+    await this.redisService.set(
       key,
       JSON.stringify({ redirectUri: redirectUri ?? null, clientState: clientState ?? null }),
-      { EX: authConfig.oauthStateExpirySeconds },
+      authConfig.oauthStateExpirySeconds,
     );
 
     return state;
@@ -813,8 +811,7 @@ export class AuthService {
 
   private async consumeOAuthState(provider: 'google' | 'github', state: string) {
     const key = `${AUTH_OAUTH_STATE_PREFIX}:${provider}:${state}`;
-    const client = this.redisService.getClient();
-    const value = await client.get(key);
+    const value = await this.redisService.get(key);
 
     if (!value) {
       throw new AppException(
@@ -824,7 +821,7 @@ export class AuthService {
       );
     }
 
-    await client.del(key);
+    await this.redisService.del(key);
     return JSON.parse(value) as { clientState: string | null; redirectUri: string | null };
   }
 
