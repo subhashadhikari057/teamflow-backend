@@ -5,6 +5,7 @@ import { AppException } from '../../../common/exceptions/app.exception';
 import { ChannelMembersRepository } from '../../channels/repositories/channel-members.repository';
 import { ChannelsRepository } from '../../channels/repositories/channels.repository';
 import type { MessageWithSender } from '../interfaces/messages.interface';
+import { MessagesGateway } from '../messages.gateway';
 import { MessagesRepository } from '../repositories/messages.repository';
 import { MESSAGES_ERROR_CODES } from '../messages.types';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -19,6 +20,7 @@ export class MobileMessagesService {
     private readonly messagesRepository: MessagesRepository,
     private readonly channelsRepository: ChannelsRepository,
     private readonly channelMembersRepository: ChannelMembersRepository,
+    private readonly messagesGateway: MessagesGateway,
   ) {}
 
   async createMessage(
@@ -60,8 +62,10 @@ export class MobileMessagesService {
       senderId: userId,
       content,
     });
+    const response = this.mapMessageResponse(message);
+    this.messagesGateway.emitMessageCreated(workspaceId, channelId, response);
 
-    return this.mapMessageResponse(message);
+    return response;
   }
 
   async listMessages(
@@ -133,8 +137,10 @@ export class MobileMessagesService {
       content,
       editedAt: new Date(),
     });
+    const response = this.mapMessageResponse(updated);
+    this.messagesGateway.emitMessageUpdated(workspaceId, channelId, response);
 
-    return this.mapMessageResponse(updated);
+    return response;
   }
 
   async deleteMessage(
@@ -165,6 +171,7 @@ export class MobileMessagesService {
     }
 
     await this.messagesRepository.softDelete(messageId);
+    this.messagesGateway.emitMessageDeleted(workspaceId, channelId, messageId);
 
     return plainToInstance(
       MessageActionResponseDto,
