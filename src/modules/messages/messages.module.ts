@@ -4,6 +4,7 @@ import { ChannelMemberGuard } from '../../common/guards/channel-member.guard';
 import { WorkspaceRoleGuard } from '../../common/guards/workspace-role.guard';
 import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 import { MessagesGateway } from './messages.gateway';
+import { MessagesRealtimeService } from './messages-realtime.service';
 import { MobileMessagesController } from './mobile/mobile-messages.controller';
 import { MobileMessagesService } from './mobile/mobile-messages.service';
 import { MessagesRepository } from './repositories/messages.repository';
@@ -16,6 +17,7 @@ import { ChannelsRepository } from '../channels/repositories/channels.repository
   providers: [
     MobileMessagesService,
     MessagesGateway,
+    MessagesRealtimeService,
     MessagesRepository,
     ChannelsRepository,
     ChannelMembersRepository,
@@ -23,5 +25,6 @@ import { ChannelsRepository } from '../channels/repositories/channels.repository
     WorkspaceRoleGuard,
     ChannelMemberGuard,
   ],
+  exports: [MessagesRealtimeService],
 })
 export class MessagesModule {}

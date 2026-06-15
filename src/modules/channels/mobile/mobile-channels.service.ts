@@ -3,6 +3,7 @@ import { ChannelMemberRole, ChannelType, WorkspaceRole } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AppException } from '../../../common/exceptions/app.exception';
 import { WorkspaceMembersRepository } from '../../workspaces/repositories/workspace-members.repository';
+import { MessagesRealtimeService } from '../../messages/messages-realtime.service';
 import { MessagesRepository } from '../../messages/repositories/messages.repository';
 import type {
   ChannelMemberWithUser,
@@ -27,6 +28,7 @@ export class MobileChannelsService {
     private readonly channelMembersRepository: ChannelMembersRepository,
     private readonly workspaceMembersRepository: WorkspaceMembersRepository,
     private readonly messagesRepository: MessagesRepository,
+    private readonly messagesRealtimeService: MessagesRealtimeService,
   ) {}
 
   async createChannel(
@@ -540,6 +542,11 @@ export class MobileChannelsService {
     await this.channelMembersRepository.update(membership.id, {
       lastReadAt: new Date(),
     });
+    await this.messagesRealtimeService.emitChannelMetaUpdatedForUser(
+      workspaceId,
+      channelId,
+      userId,
+    );
 
     return plainToInstance(
       ChannelActionResponseDto,

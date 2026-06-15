@@ -6,6 +6,7 @@ import { ChannelMembersRepository } from '../../channels/repositories/channel-me
 import { ChannelsRepository } from '../../channels/repositories/channels.repository';
 import type { MessageWithSender } from '../interfaces/messages.interface';
 import { MessagesGateway } from '../messages.gateway';
+import { MessagesRealtimeService } from '../messages-realtime.service';
 import { MessagesRepository } from '../repositories/messages.repository';
 import { MESSAGES_ERROR_CODES } from '../messages.types';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -21,6 +22,7 @@ export class MobileMessagesService {
     private readonly channelsRepository: ChannelsRepository,
     private readonly channelMembersRepository: ChannelMembersRepository,
     private readonly messagesGateway: MessagesGateway,
+    private readonly messagesRealtimeService: MessagesRealtimeService,
   ) {}
 
   async createMessage(
@@ -62,8 +64,15 @@ export class MobileMessagesService {
       senderId: userId,
       content,
     });
+    await this.channelMembersRepository.update(membership.id, {
+      lastReadAt: message.createdAt,
+    });
     const response = this.mapMessageResponse(message);
     this.messagesGateway.emitMessageCreated(workspaceId, channelId, response);
+    await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(
+      workspaceId,
+      channelId,
+    );
 
     return response;
   }
@@ -139,6 +148,10 @@ export class MobileMessagesService {
     });
     const response = this.mapMessageResponse(updated);
     this.messagesGateway.emitMessageUpdated(workspaceId, channelId, response);
+    await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(
+      workspaceId,
+      channelId,
+    );
 
     return response;
   }
@@ -172,6 +185,10 @@ export class MobileMessagesService {
 
     await this.messagesRepository.softDelete(messageId);
     this.messagesGateway.emitMessageDeleted(workspaceId, channelId, messageId);
+    await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(
+      workspaceId,
+      channelId,
+    );
 
     return plainToInstance(
       MessageActionResponseDto,

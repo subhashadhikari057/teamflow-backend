@@ -18,9 +18,11 @@ import { AppException } from '../../common/exceptions/app.exception';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { ChannelsRepository } from '../channels/repositories/channels.repository';
 import { ChannelMembersRepository } from '../channels/repositories/channel-members.repository';
+import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 import { MESSAGES_ERROR_CODES } from './messages.types';
 import { ChannelRoomActionDto } from './mobile/dto/channel-room-action.dto';
 import type { MessageResponseDto } from './mobile/dto/message-response.dto';
+import { WorkspaceRoomActionDto } from './mobile/dto/workspace-room-action.dto';
 
 type AccessTokenPayload = {
   sub: string;
@@ -59,7 +61,44 @@ export class MessagesGateway
     private readonly jwtService: JwtService,
     private readonly channelsRepository: ChannelsRepository,
     private readonly channelMembersRepository: ChannelMembersRepository,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
   ) {}
+
+  @SubscribeMessage('workspace.join')
+  async handleJoinWorkspace(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() payload: WorkspaceRoomActionDto,
+  ) {
+    const dto = this.validatePayload(payload, WorkspaceRoomActionDto);
+    const user = this.ensureSocketUser(client);
+    await this.assertWorkspaceMembership(user.id, dto.workspaceId);
+
+    await client.join(this.workspaceRoom(dto.workspaceId, user.id));
+
+    return {
+      joined: true,
+      room: this.workspaceRoom(dto.workspaceId, user.id),
+      workspaceId: dto.workspaceId,
+    };
+  }
+
+  @SubscribeMessage('workspace.leave')
+  async handleLeaveWorkspace(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() payload: WorkspaceRoomActionDto,
+  ) {
+    const dto = this.validatePayload(payload, WorkspaceRoomActionDto);
+    const user = this.ensureSocketUser(client);
+    await this.assertWorkspaceMembership(user.id, dto.workspaceId);
+
+    await client.leave(this.workspaceRoom(dto.workspaceId, user.id));
+
+    return {
+      joined: false,
+      room: this.workspaceRoom(dto.workspaceId, user.id),
+      workspaceId: dto.workspaceId,
+    };
+  }
 
   async handleConnection(client: RealtimeSocket) {
     try {
@@ -85,7 +124,7 @@ export class MessagesGateway
     @ConnectedSocket() client: RealtimeSocket,
     @MessageBody() payload: ChannelRoomActionDto,
   ) {
-    const dto = this.validatePayload(payload);
+    const dto = this.validatePayload(payload, ChannelRoomActionDto);
     const user = this.ensureSocketUser(client);
     await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
 
@@ -104,7 +143,7 @@ export class MessagesGateway
     @ConnectedSocket() client: RealtimeSocket,
     @MessageBody() payload: ChannelRoomActionDto,
   ) {
-    const dto = this.validatePayload(payload);
+    const dto = this.validatePayload(payload, ChannelRoomActionDto);
     const user = this.ensureSocketUser(client);
     await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
 
@@ -152,6 +191,27 @@ export class MessagesGateway
       messageId,
       workspaceId,
     });
+  }
+
+  emitChannelMetaUpdated(
+    userId: string,
+    payload: {
+      workspaceId: string;
+      channelId: string;
+      unreadCount: number;
+      lastReadAt: Date | null;
+      lastMessageAt: Date | null;
+      lastMessage: {
+        id: string;
+        content: string;
+        senderId: string;
+        createdAt: Date;
+      } | null;
+    },
+  ) {
+    this.server
+      .to(this.workspaceRoom(payload.workspaceId, userId))
+      .emit('channel.meta.updated', payload);
   }
 
   private async authenticateClient(client: RealtimeSocket): Promise<AuthUser> {
@@ -208,6 +268,10 @@ export class MessagesGateway
     return `channel:${channelId}`;
   }
 
+  private workspaceRoom(workspaceId: string, userId: string) {
+    return `workspace:${workspaceId}:user:${userId}`;
+  }
+
   private ensureSocketUser(client: RealtimeSocket) {
     const user = client.data.user;
 
@@ -218,8 +282,11 @@ export class MessagesGateway
     return user;
   }
 
-  private validatePayload(payload: ChannelRoomActionDto) {
-    const dto = plainToInstance(ChannelRoomActionDto, payload);
+  private validatePayload<T extends object>(
+    payload: unknown,
+    dtoClass: new () => T,
+  ) {
+    const dto = plainToInstance(dtoClass, payload);
     const errors = validateSync(dto, {
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -234,6 +301,24 @@ export class MessagesGateway
     }
 
     return dto;
+  }
+
+  private async assertWorkspaceMembership(userId: string, workspaceId: string) {
+    const membership =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        workspaceId,
+        userId,
+      );
+
+    if (!membership || !membership.isActive) {
+      throw new WsException(
+        new AppException(
+          MESSAGES_ERROR_CODES.CHANNEL_NOT_FOUND,
+          'You are not an active member of this workspace',
+          { status: HttpStatus.FORBIDDEN },
+        ).message,
+      );
+    }
   }
 
   private async assertChannelMembership(
