@@ -68,6 +68,10 @@ export class MobileMessagesService {
       lastReadAt: message.createdAt,
     });
     const response = this.mapMessageResponse(message);
+    this.messagesGateway.emitTypingStop(workspaceId, channelId, {
+      id: userId,
+      username: message.sender.username,
+    });
     this.messagesGateway.emitMessageCreated(workspaceId, channelId, response);
     await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(
       workspaceId,

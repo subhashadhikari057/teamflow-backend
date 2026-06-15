@@ -39,6 +39,13 @@ type RealtimeSocket = Socket & {
   };
 };
 
+type TypingPayload = {
+  workspaceId: string;
+  channelId: string;
+  userId: string;
+  username: string;
+};
+
 @Injectable()
 @WebSocketGateway({
   namespace: 'messages',
@@ -56,6 +63,7 @@ export class MessagesGateway
   server!: Server;
 
   private readonly logger = new Logger(MessagesGateway.name);
+  private readonly typingTimeouts = new Map<string, NodeJS.Timeout>();
 
   constructor(
     private readonly jwtService: JwtService,
@@ -115,6 +123,12 @@ export class MessagesGateway
     const userId = client.data.user?.id;
 
     if (userId) {
+      for (const [key, timeout] of this.typingTimeouts.entries()) {
+        if (key.endsWith(`:${userId}`)) {
+          clearTimeout(timeout);
+          this.typingTimeouts.delete(key);
+        }
+      }
       this.logger.debug(`WebSocket disconnected for user ${userId}`);
     }
   }
@@ -155,6 +169,60 @@ export class MessagesGateway
       room: this.channelRoom(dto.channelId),
       workspaceId: dto.workspaceId,
     };
+  }
+
+  @SubscribeMessage('typing.start')
+  async handleTypingStart(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() payload: ChannelRoomActionDto,
+  ) {
+    const dto = this.validatePayload(payload, ChannelRoomActionDto);
+    const user = this.ensureSocketUser(client);
+    await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
+
+    this.clearTypingTimeout(dto.channelId, user.id);
+
+    client
+      .to(this.channelRoom(dto.channelId))
+      .emit(
+        'typing.start',
+        this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
+      );
+
+    const timeout = setTimeout(() => {
+      this.server
+        .to(this.channelRoom(dto.channelId))
+        .emit(
+          'typing.stop',
+          this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
+        );
+      this.typingTimeouts.delete(this.typingKey(dto.channelId, user.id));
+    }, 4000);
+
+    this.typingTimeouts.set(this.typingKey(dto.channelId, user.id), timeout);
+
+    return { ok: true };
+  }
+
+  @SubscribeMessage('typing.stop')
+  async handleTypingStop(
+    @ConnectedSocket() client: RealtimeSocket,
+    @MessageBody() payload: ChannelRoomActionDto,
+  ) {
+    const dto = this.validatePayload(payload, ChannelRoomActionDto);
+    const user = this.ensureSocketUser(client);
+    await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
+
+    this.clearTypingTimeout(dto.channelId, user.id);
+
+    client
+      .to(this.channelRoom(dto.channelId))
+      .emit(
+        'typing.stop',
+        this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
+      );
+
+    return { ok: true };
   }
 
   emitMessageCreated(
@@ -214,6 +282,20 @@ export class MessagesGateway
       .emit('channel.meta.updated', payload);
   }
 
+  emitTypingStop(
+    workspaceId: string,
+    channelId: string,
+    user: { id: string; username: string },
+  ) {
+    this.clearTypingTimeout(channelId, user.id);
+    this.server.to(this.channelRoom(channelId)).emit('typing.stop', {
+      workspaceId,
+      channelId,
+      userId: user.id,
+      username: user.username,
+    });
+  }
+
   private async authenticateClient(client: RealtimeSocket): Promise<AuthUser> {
     const token = this.extractToken(client);
 
@@ -268,8 +350,35 @@ export class MessagesGateway
     return `channel:${channelId}`;
   }
 
+  private typingKey(channelId: string, userId: string) {
+    return `${channelId}:${userId}`;
+  }
+
   private workspaceRoom(workspaceId: string, userId: string) {
     return `workspace:${workspaceId}:user:${userId}`;
+  }
+
+  private clearTypingTimeout(channelId: string, userId: string) {
+    const key = this.typingKey(channelId, userId);
+    const timeout = this.typingTimeouts.get(key);
+
+    if (timeout) {
+      clearTimeout(timeout);
+      this.typingTimeouts.delete(key);
+    }
+  }
+
+  private buildTypingPayload(
+    workspaceId: string,
+    channelId: string,
+    user: AuthUser,
+  ): TypingPayload {
+    return {
+      workspaceId,
+      channelId,
+      userId: user.id,
+      username: user.username,
+    };
   }
 
   private ensureSocketUser(client: RealtimeSocket) {
