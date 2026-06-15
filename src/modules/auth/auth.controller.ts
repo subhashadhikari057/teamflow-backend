@@ -44,29 +44,36 @@ import { AuthService } from './auth.service';
 import { buildSessionMetadata } from './auth-session-metadata.util';
 import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
 import { appConfig } from '../../config/app.config';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { AuthRateLimit } from './auth-rate-limit.decorator';
 
 @ApiTags('Auth')
+@UseGuards(AuthRateLimitGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @AuthRateLimit('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user account' })
   @ApiResponse({ status: 201, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 409, description: 'Email or username already exists' })
+  @ApiResponse({ status: 429, description: 'Too many registration attempts' })
   register(@Body() dto: RegisterDto): Promise<AuthActionResponseDto> {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @AuthRateLimit('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with email or username and password' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   @ApiResponse({ status: 403, description: 'Email not verified or account inactive' })
+  @ApiResponse({ status: 429, description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
     @Req() req: Request,
@@ -101,10 +108,12 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @AuthRateLimit('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Exchange a refresh token for a new session' })
   @ApiResponse({ status: 200, type: AuthSessionResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
+  @ApiResponse({ status: 429, description: 'Too many refresh attempts' })
   async refresh(
     @Cookie('refresh_token') refreshToken: string | undefined,
     @Req() req: Request,
@@ -128,10 +137,12 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @AuthRateLimit('resendVerification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend the email verification token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 429, description: 'Too many resend verification attempts' })
   resendVerification(
     @Body() dto: ResendVerificationDto,
   ): Promise<AuthActionResponseDto> {
@@ -139,10 +150,12 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @AuthRateLimit('forgotPassword')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a password reset token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 429, description: 'Too many forgot password attempts' })
   forgotPassword(@Body() dto: ForgotPasswordDto): Promise<AuthActionResponseDto> {
     return this.authService.forgotPassword(dto);
   }
@@ -214,9 +227,11 @@ export class AuthController {
   }
 
   @Get('google')
+  @AuthRateLimit('googleOauth')
   @ApiOperation({ summary: 'Generate the Google OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
   @ApiResponse({ status: 503, description: 'Google OAuth is not configured' })
+  @ApiResponse({ status: 429, description: 'Too many Google OAuth attempts' })
   google(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {
@@ -258,9 +273,11 @@ export class AuthController {
   }
 
   @Get('github')
+  @AuthRateLimit('githubOauth')
   @ApiOperation({ summary: 'Generate the GitHub OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
   @ApiResponse({ status: 503, description: 'GitHub OAuth is not configured' })
+  @ApiResponse({ status: 429, description: 'Too many GitHub OAuth attempts' })
   github(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {

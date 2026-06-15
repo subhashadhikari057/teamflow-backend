@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { AuthController } from './auth.controller';
 import { AuthSessionsController } from './auth-sessions.controller';
 import { AuthSessionsService } from './auth-sessions.service';
@@ -14,6 +16,8 @@ import { AuthRepository } from './repositories/auth.repository';
   controllers: [AuthController, AuthSessionsController, AuthTwoFactorController],
   providers: [
     AuthService,
+    AuthRateLimitGuard,
+    AuthRateLimitService,
     AuthSessionsService,
     AuthTwoFactorService,
     AuthRepository,

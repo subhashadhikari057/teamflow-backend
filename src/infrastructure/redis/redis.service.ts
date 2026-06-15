@@ -53,6 +53,24 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     await this.client.del(key);
   }
 
+  async increment(key: string, ttlSeconds = redisConfig.defaultTtlSeconds) {
+    const count = await this.client.incr(key);
+
+    if (count === 1) {
+      await this.client.expire(key, ttlSeconds);
+      return { count, ttlSeconds };
+    }
+
+    let currentTtl = await this.client.ttl(key);
+
+    if (currentTtl < 0) {
+      await this.client.expire(key, ttlSeconds);
+      currentTtl = ttlSeconds;
+    }
+
+    return { count, ttlSeconds: currentTtl };
+  }
+
   getClient() {
     return this.client;
   }

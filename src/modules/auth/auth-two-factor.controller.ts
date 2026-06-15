@@ -15,8 +15,11 @@ import { RegenerateBackupCodesDto } from './dto/regenerate-backup-codes.dto';
 import { VerifyTwoFactorDto } from './dto/verify-two-factor.dto';
 import { buildSessionMetadata } from './auth-session-metadata.util';
 import { setAuthCookies } from './auth-cookies.util';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { AuthRateLimit } from './auth-rate-limit.decorator';
 
 @ApiTags('Auth 2FA')
+@UseGuards(AuthRateLimitGuard)
 @Controller('auth/2fa')
 export class AuthTwoFactorController {
   constructor(private readonly authTwoFactorService: AuthTwoFactorService) {}
@@ -64,10 +67,12 @@ export class AuthTwoFactorController {
   }
 
   @Post('verify')
+  @AuthRateLimit('twoFactorVerify')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify a 2FA code during login' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 400, description: 'Invalid or expired 2FA code or challenge token' })
+  @ApiResponse({ status: 429, description: 'Too many two-factor verification attempts' })
   async verify(
     @Body() dto: VerifyTwoFactorDto,
     @Req() req: Request,
