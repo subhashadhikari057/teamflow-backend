@@ -55,7 +55,11 @@ export class MobileChannelsController {
     @Param() params: WorkspaceIdParamDto,
     @Body() dto: CreateChannelDto,
   ): Promise<ChannelResponseDto> {
-    return this.mobileChannelsService.createChannel(user.id, params.workspaceId, dto);
+    return this.mobileChannelsService.createChannel(
+      user.id,
+      params.workspaceId,
+      dto,
+    );
   }
 
   @Get()
@@ -98,7 +102,12 @@ export class MobileChannelsController {
     @Param() params: ChannelIdParamDto,
     @Body() dto: UpdateChannelDto,
   ): Promise<ChannelResponseDto> {
-    return this.mobileChannelsService.updateChannel(user.id, params.workspaceId, params.channelId, dto);
+    return this.mobileChannelsService.updateChannel(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+      dto,
+    );
   }
 
   @Delete(':channelId')
@@ -110,7 +119,10 @@ export class MobileChannelsController {
   deleteChannel(
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelActionResponseDto> {
-    return this.mobileChannelsService.deleteChannel(params.workspaceId, params.channelId);
+    return this.mobileChannelsService.deleteChannel(
+      params.workspaceId,
+      params.channelId,
+    );
   }
 
   @Patch(':channelId/archive')
@@ -122,7 +134,11 @@ export class MobileChannelsController {
     @CurrentUser() user: AuthUser,
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelResponseDto> {
-    return this.mobileChannelsService.toggleArchive(user.id, params.workspaceId, params.channelId);
+    return this.mobileChannelsService.toggleArchive(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+    );
   }
 
   @Post(':channelId/join')
@@ -135,7 +151,11 @@ export class MobileChannelsController {
     @CurrentUser() user: AuthUser,
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelMemberResponseDto> {
-    return this.mobileChannelsService.joinChannel(user.id, params.workspaceId, params.channelId);
+    return this.mobileChannelsService.joinChannel(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+    );
   }
 
   @Post(':channelId/leave')
@@ -148,7 +168,11 @@ export class MobileChannelsController {
     @CurrentUser() user: AuthUser,
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelActionResponseDto> {
-    return this.mobileChannelsService.leaveChannel(user.id, params.workspaceId, params.channelId);
+    return this.mobileChannelsService.leaveChannel(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+    );
   }
 
   @Post(':channelId/members')
@@ -161,7 +185,11 @@ export class MobileChannelsController {
     @Param() params: ChannelIdParamDto,
     @Body() dto: AddChannelMemberDto,
   ): Promise<ChannelMemberResponseDto> {
-    return this.mobileChannelsService.addMember(params.workspaceId, params.channelId, dto);
+    return this.mobileChannelsService.addMember(
+      params.workspaceId,
+      params.channelId,
+      dto,
+    );
   }
 
   @Get(':channelId/members')
@@ -172,7 +200,10 @@ export class MobileChannelsController {
   listMembers(
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelMemberResponseDto[]> {
-    return this.mobileChannelsService.listMembers(params.workspaceId, params.channelId);
+    return this.mobileChannelsService.listMembers(
+      params.workspaceId,
+      params.channelId,
+    );
   }
 
   @Patch(':channelId/members/:userId')
@@ -233,6 +264,10 @@ export class MobileChannelsController {
     @CurrentUser() user: AuthUser,
     @Param() params: ChannelIdParamDto,
   ): Promise<ChannelActionResponseDto> {
-    return this.mobileChannelsService.markRead(user.id, params.workspaceId, params.channelId);
+    return this.mobileChannelsService.markRead(
+      user.id,
+      params.workspaceId,
+      params.channelId,
+    );
   }
 }

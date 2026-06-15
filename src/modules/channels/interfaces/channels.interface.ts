@@ -10,6 +10,19 @@ export interface ChannelWithCurrentMember extends Channel {
     username: string;
     avatarUrl: string | null;
   };
+  messages: {
+    id: string;
+    channelId: string;
+    content: string;
+    senderId: string;
+    createdAt: Date;
+    sender: {
+      id: string;
+      name: string | null;
+      username: string;
+      avatarUrl: string | null;
+    };
+  }[];
   members: ChannelMember[];
 }
 

@@ -19,6 +19,26 @@ const channelWithCurrentMemberInclude = (userId: string) =>
         avatarUrl: true,
       },
     },
+    messages: {
+      where: { deletedAt: null },
+      take: 1,
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      select: {
+        id: true,
+        channelId: true,
+        content: true,
+        senderId: true,
+        createdAt: true,
+        sender: {
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            avatarUrl: true,
+          },
+        },
+      },
+    },
     members: {
       where: { userId },
       take: 1,
@@ -72,10 +92,7 @@ export class ChannelsRepository {
         workspaceId,
         deletedAt: null,
         isArchived: false,
-        OR: [
-          { type: ChannelType.PUBLIC },
-          { members: { some: { userId } } },
-        ],
+        OR: [{ type: ChannelType.PUBLIC }, { members: { some: { userId } } }],
       },
       include: channelWithCurrentMemberInclude(userId),
       orderBy: [{ isGeneral: 'desc' }, { createdAt: 'asc' }],
@@ -92,10 +109,7 @@ export class ChannelsRepository {
     });
   }
 
-  update(
-    id: string,
-    data: Prisma.ChannelUpdateInput,
-  ): Promise<Channel> {
+  update(id: string, data: Prisma.ChannelUpdateInput): Promise<Channel> {
     return this.prisma.channel.update({
       where: { id },
       data,

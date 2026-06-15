@@ -3,6 +3,7 @@ import { ChannelMemberRole, ChannelType, WorkspaceRole } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AppException } from '../../../common/exceptions/app.exception';
 import { WorkspaceMembersRepository } from '../../workspaces/repositories/workspace-members.repository';
+import { MessagesRepository } from '../../messages/repositories/messages.repository';
 import type {
   ChannelMemberWithUser,
   ChannelWithCurrentMember,
@@ -25,6 +26,7 @@ export class MobileChannelsService {
     private readonly channelsRepository: ChannelsRepository,
     private readonly channelMembersRepository: ChannelMembersRepository,
     private readonly workspaceMembersRepository: WorkspaceMembersRepository,
+    private readonly messagesRepository: MessagesRepository,
   ) {}
 
   async createChannel(
@@ -87,12 +89,15 @@ export class MobileChannelsService {
     userId: string,
     workspaceId: string,
   ): Promise<ChannelResponseDto[]> {
-    const channels = await this.channelsRepository.findVisibleByWorkspaceForUser(
-      workspaceId,
-      userId,
-    );
+    const channels =
+      await this.channelsRepository.findVisibleByWorkspaceForUser(
+        workspaceId,
+        userId,
+      );
 
-    return channels.map((channel) => this.mapChannelResponse(channel));
+    return Promise.all(
+      channels.map((channel) => this.mapChannelResponse(channel)),
+    );
   }
 
   async getChannel(
@@ -165,7 +170,9 @@ export class MobileChannelsService {
     }
 
     await this.channelsRepository.update(channel.id, {
-      ...(dto.name !== undefined && { name: this.normalizeChannelName(dto.name) }),
+      ...(dto.name !== undefined && {
+        name: this.normalizeChannelName(dto.name),
+      }),
       ...(dto.description !== undefined && { description: dto.description }),
       ...(dto.topic !== undefined && { topic: dto.topic }),
       ...(dto.isReadOnly !== undefined && { isReadOnly: dto.isReadOnly }),
@@ -320,10 +327,11 @@ export class MobileChannelsService {
       );
     }
 
-    const membership = await this.channelMembersRepository.findByChannelAndUserRaw(
-      channel.id,
-      userId,
-    );
+    const membership =
+      await this.channelMembersRepository.findByChannelAndUserRaw(
+        channel.id,
+        userId,
+      );
     if (!membership) {
       throw new AppException(
         CHANNELS_ERROR_CODES.CHANNEL_MEMBER_NOT_FOUND,
@@ -410,7 +418,8 @@ export class MobileChannelsService {
     channelId: string,
   ): Promise<ChannelMemberResponseDto[]> {
     await this.getChannelEntityOrThrow(workspaceId, channelId);
-    const members = await this.channelMembersRepository.findAllByChannel(channelId);
+    const members =
+      await this.channelMembersRepository.findAllByChannel(channelId);
     return members.map((member) => this.mapChannelMemberResponse(member));
   }
 
@@ -422,10 +431,11 @@ export class MobileChannelsService {
   ): Promise<ChannelMemberResponseDto> {
     await this.getChannelEntityOrThrow(workspaceId, channelId);
 
-    const membership = await this.channelMembersRepository.findByChannelAndUserRaw(
-      channelId,
-      userId,
-    );
+    const membership =
+      await this.channelMembersRepository.findByChannelAndUserRaw(
+        channelId,
+        userId,
+      );
     if (!membership) {
       throw new AppException(
         CHANNELS_ERROR_CODES.CHANNEL_MEMBER_NOT_FOUND,
@@ -456,10 +466,11 @@ export class MobileChannelsService {
       );
     }
 
-    const membership = await this.channelMembersRepository.findByChannelAndUserRaw(
-      channel.id,
-      userId,
-    );
+    const membership =
+      await this.channelMembersRepository.findByChannelAndUserRaw(
+        channel.id,
+        userId,
+      );
     if (!membership) {
       throw new AppException(
         CHANNELS_ERROR_CODES.CHANNEL_MEMBER_NOT_FOUND,
@@ -483,10 +494,11 @@ export class MobileChannelsService {
     channelId: string,
   ): Promise<ChannelActionResponseDto> {
     await this.getChannelEntityOrThrow(workspaceId, channelId);
-    const membership = await this.channelMembersRepository.findByChannelAndUserRaw(
-      channelId,
-      userId,
-    );
+    const membership =
+      await this.channelMembersRepository.findByChannelAndUserRaw(
+        channelId,
+        userId,
+      );
     if (!membership) {
       throw new AppException(
         CHANNELS_ERROR_CODES.CHANNEL_MEMBER_NOT_FOUND,
@@ -512,10 +524,11 @@ export class MobileChannelsService {
     channelId: string,
   ): Promise<ChannelActionResponseDto> {
     await this.getChannelEntityOrThrow(workspaceId, channelId);
-    const membership = await this.channelMembersRepository.findByChannelAndUserRaw(
-      channelId,
-      userId,
-    );
+    const membership =
+      await this.channelMembersRepository.findByChannelAndUserRaw(
+        channelId,
+        userId,
+      );
     if (!membership) {
       throw new AppException(
         CHANNELS_ERROR_CODES.CHANNEL_MEMBER_NOT_FOUND,
@@ -581,10 +594,19 @@ export class MobileChannelsService {
     }
   }
 
-  private mapChannelResponse(
+  private async mapChannelResponse(
     channel: ChannelWithCurrentMember,
     members?: ChannelMemberWithUser[],
-  ): ChannelResponseDto {
+  ): Promise<ChannelResponseDto> {
+    const currentMembership = channel.members[0];
+    const lastMessage = channel.messages[0];
+    const unreadCount = currentMembership
+      ? await this.messagesRepository.countUnreadByChannel({
+          channelId: channel.id,
+          lastReadAt: currentMembership.lastReadAt,
+        })
+      : 0;
+
     return plainToInstance(
       ChannelResponseDto,
       {
@@ -598,11 +620,25 @@ export class MobileChannelsService {
         isArchived: channel.isArchived,
         isGeneral: channel.isGeneral,
         memberCount: channel._count.members,
-        isMember: channel.members.length > 0,
+        isMember: Boolean(currentMembership),
+        unreadCount,
+        lastReadAt: currentMembership?.lastReadAt ?? null,
         createdBy: channel.createdBy,
         creator: channel.creator,
         createdAt: channel.createdAt,
-        members: members?.map((member) => this.mapChannelMemberResponse(member)),
+        lastMessageAt: lastMessage?.createdAt ?? null,
+        lastMessage: lastMessage
+          ? {
+              id: lastMessage.id,
+              content: lastMessage.content,
+              senderId: lastMessage.senderId,
+              createdAt: lastMessage.createdAt,
+              sender: lastMessage.sender,
+            }
+          : null,
+        members: members?.map((member) =>
+          this.mapChannelMemberResponse(member),
+        ),
       },
       { excludeExtraneousValues: true },
     );

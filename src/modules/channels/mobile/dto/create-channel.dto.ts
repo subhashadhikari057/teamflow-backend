@@ -12,7 +12,8 @@ import {
 
 export class CreateChannelDto {
   @ApiProperty({
-    description: 'Channel name; it will be normalized to lowercase hyphen format',
+    description:
+      'Channel name; it will be normalized to lowercase hyphen format',
     example: 'engineering-team',
   })
   @IsString()

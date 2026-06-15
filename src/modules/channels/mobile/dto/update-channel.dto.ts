@@ -10,7 +10,8 @@ import {
 
 export class UpdateChannelDto {
   @ApiPropertyOptional({
-    description: 'Updated channel name; it will be normalized to lowercase hyphen format',
+    description:
+      'Updated channel name; it will be normalized to lowercase hyphen format',
     example: 'engineering-team',
   })
   @IsOptional()

@@ -11,6 +11,7 @@ import { StarterModule } from './modules/starter/starter.module';
 import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { StartupModule } from './startup/startup.module';
 
 @Module({
@@ -21,6 +22,7 @@ import { StartupModule } from './startup/startup.module';
     EmailModule,
     PrismaModule,
     RedisModule,
+    MessagesModule,
     StarterModule,
     StartupModule,
     UploadModule,

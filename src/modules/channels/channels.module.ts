@@ -3,6 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { ChannelMemberGuard } from '../../common/guards/channel-member.guard';
 import { WorkspaceRoleGuard } from '../../common/guards/workspace-role.guard';
 import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
+import { MessagesRepository } from '../messages/repositories/messages.repository';
 import { MobileChannelsController } from './mobile/mobile-channels.controller';
 import { MobileChannelsService } from './mobile/mobile-channels.service';
 import { ChannelMembersRepository } from './repositories/channel-members.repository';
@@ -15,6 +16,7 @@ import { ChannelsRepository } from './repositories/channels.repository';
     MobileChannelsService,
     ChannelsRepository,
     ChannelMembersRepository,
+    MessagesRepository,
     WorkspaceMembersRepository,
     WorkspaceRoleGuard,
     ChannelMemberGuard,
