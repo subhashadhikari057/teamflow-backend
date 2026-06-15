@@ -1,0 +1,17 @@
+export const UPLOAD_ERROR_CODES = {
+  IMAGE_NOT_PROVIDED: 'UPLOAD_IMAGE_NOT_PROVIDED',
+  INVALID_IMAGE_TYPE: 'UPLOAD_INVALID_IMAGE_TYPE',
+  IMAGE_PROCESSING_FAILED: 'UPLOAD_IMAGE_PROCESSING_FAILED',
+  IMAGE_READ_FAILED: 'UPLOAD_IMAGE_READ_FAILED',
+} as const;
+
+export const UPLOAD_ALLOWED_IMAGE_MIME_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
+] as const;
+
+export const UPLOAD_DEFAULT_IMAGE_QUALITY = 82;
+export const UPLOAD_MAX_FILES = 10;

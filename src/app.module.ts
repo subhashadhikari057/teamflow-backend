@@ -8,6 +8,7 @@ import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
 import { ChannelsModule } from './modules/channels/channels.module';
 import { StarterModule } from './modules/starter/starter.module';
+import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
 import { WorkspacesModule } from './modules/workspaces/workspaces.module';
 import { StartupModule } from './startup/startup.module';
@@ -22,6 +23,7 @@ import { StartupModule } from './startup/startup.module';
     RedisModule,
     StarterModule,
     StartupModule,
+    UploadModule,
     UsersModule,
     WorkspacesModule,
   ],
