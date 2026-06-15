@@ -9,7 +9,6 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   MinLength,
   ValidateNested,
@@ -48,14 +47,13 @@ export class CreateWorkspaceOnboardingDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'URL of the workspace logo',
-    example: 'https://example.com/logo.png',
+    description: 'Workspace logo path or URL',
+    example: 'images/ba3b4bdf-9ba8-4ff0-a40e-5a10acce84c2.webp',
     maxLength: 500,
   })
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  @IsUrl()
   logoUrl?: string;
 
   @ApiPropertyOptional({

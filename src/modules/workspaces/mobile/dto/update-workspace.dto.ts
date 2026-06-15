@@ -1,6 +1,6 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose } from 'class-transformer';
-import { IsOptional, IsString, IsUrl, MaxLength } from 'class-validator';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateWorkspaceDto {
   @ApiPropertyOptional({
@@ -15,14 +15,13 @@ export class UpdateWorkspaceDto {
   name?: string;
 
   @ApiPropertyOptional({
-    description: 'URL of the workspace logo',
-    example: 'https://example.com/logo.png',
+    description: 'Workspace logo path or URL',
+    example: 'images/ba3b4bdf-9ba8-4ff0-a40e-5a10acce84c2.webp',
     maxLength: 500,
   })
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  @IsUrl()
   @Expose()
   logoUrl?: string;
 
@@ -38,7 +37,8 @@ export class UpdateWorkspaceDto {
   description?: string;
 
   @ApiPropertyOptional({
-    description: 'Allowed email domain for joining the workspace. Pass null or omit to clear.',
+    description:
+      'Allowed email domain for joining the workspace. Pass null or omit to clear.',
     example: 'acme.com',
     maxLength: 100,
   })
