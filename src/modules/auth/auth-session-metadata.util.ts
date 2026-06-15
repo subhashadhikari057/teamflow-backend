@@ -7,7 +7,9 @@ type MetadataOverrides = {
   deviceType?: string;
 };
 
-function firstHeaderValue(value: string | string[] | undefined): string | undefined {
+function firstHeaderValue(
+  value: string | string[] | undefined,
+): string | undefined {
   if (Array.isArray(value)) {
     return value[0];
   }
@@ -36,7 +38,8 @@ export function buildSessionMetadata(
 
   return {
     deviceToken: overrides?.deviceToken || headerDeviceToken || null,
-    deviceType: overrides?.deviceType || headerDeviceType || (userAgent ? 'web' : null),
+    deviceType:
+      overrides?.deviceType || headerDeviceType || (userAgent ? 'web' : null),
     deviceName: overrides?.deviceName || headerDeviceName || null,
     ipAddress: resolveIpAddress(request),
     userAgent,

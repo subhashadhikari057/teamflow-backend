@@ -1,5 +1,12 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, Length, MaxLength, MinLength, ValidateIf } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  Length,
+  MaxLength,
+  MinLength,
+  ValidateIf,
+} from 'class-validator';
 import { SessionClientMetadataDto } from './session-client-metadata.dto';
 
 export class VerifyTwoFactorDto extends SessionClientMetadataDto {

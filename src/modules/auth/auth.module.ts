@@ -13,7 +13,11 @@ import { AuthRepository } from './repositories/auth.repository';
 
 @Module({
   imports: [JwtModule.register({})],
-  controllers: [AuthController, AuthSessionsController, AuthTwoFactorController],
+  controllers: [
+    AuthController,
+    AuthSessionsController,
+    AuthTwoFactorController,
+  ],
   providers: [
     AuthService,
     AuthRateLimitGuard,
@@ -23,6 +27,11 @@ import { AuthRepository } from './repositories/auth.repository';
     AuthRepository,
     WorkspaceMembersRepository,
   ],
-  exports: [AuthService, AuthSessionsService, AuthTwoFactorService, AuthRepository],
+  exports: [
+    AuthService,
+    AuthSessionsService,
+    AuthTwoFactorService,
+    AuthRepository,
+  ],
 })
 export class AuthModule {}

@@ -121,7 +121,10 @@ export class AuthTwoFactorService {
       );
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, dbUser.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      dbUser.passwordHash,
+    );
 
     if (!passwordMatches) {
       throw new AppException(
@@ -200,7 +203,9 @@ export class AuthTwoFactorService {
     );
   }
 
-  async getBackupCodes(user: AuthUser): Promise<AuthTwoFactorBackupCodesResponseDto> {
+  async getBackupCodes(
+    user: AuthUser,
+  ): Promise<AuthTwoFactorBackupCodesResponseDto> {
     const dbUser = await this.getActiveUserOrThrow(user.id);
 
     if (!dbUser.twoFactorEnabled) {
@@ -250,7 +255,10 @@ export class AuthTwoFactorService {
       );
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, dbUser.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      dbUser.passwordHash,
+    );
 
     if (!passwordMatches) {
       throw new AppException(
@@ -271,7 +279,10 @@ export class AuthTwoFactorService {
 
   async createLoginChallenge(user: User): Promise<AuthLoginResponseDto> {
     const challengeToken = await this.jwtService.signAsync(
-      { sub: user.id, type: 'two_factor_challenge' satisfies TwoFactorChallengePayload['type'] },
+      {
+        sub: user.id,
+        type: 'two_factor_challenge' satisfies TwoFactorChallengePayload['type'],
+      },
       {
         secret: authConfig.jwtSecret,
         expiresIn: 10 * 60,
@@ -307,9 +318,13 @@ export class AuthTwoFactorService {
     const user = await this.authRepository.findUserById(userId);
 
     if (!user || !user.isActive || user.deletedAt) {
-      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'User not found',
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
     return user;
@@ -317,10 +332,11 @@ export class AuthTwoFactorService {
 
   private async verifyChallengeToken(challengeToken: string) {
     try {
-      const payload = await this.jwtService.verifyAsync<TwoFactorChallengePayload>(
-        challengeToken,
-        { secret: authConfig.jwtSecret },
-      );
+      const payload =
+        await this.jwtService.verifyAsync<TwoFactorChallengePayload>(
+          challengeToken,
+          { secret: authConfig.jwtSecret },
+        );
 
       if (payload.type !== 'two_factor_challenge') {
         throw new Error('invalid');
@@ -368,7 +384,9 @@ export class AuthTwoFactorService {
     const counter = Math.floor(Date.now() / 1000 / step) + offset;
     const buffer = Buffer.alloc(8);
     buffer.writeBigUInt64BE(BigInt(counter));
-    const hmac = createHmac('sha1', this.base32Decode(secret)).update(buffer).digest();
+    const hmac = createHmac('sha1', this.base32Decode(secret))
+      .update(buffer)
+      .digest();
     const position = hmac[hmac.length - 1] & 0x0f;
     const value =
       ((hmac[position] & 0x7f) << 24) |

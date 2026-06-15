@@ -17,12 +17,18 @@ type RateLimitBucket = {
 export class AuthRateLimitService {
   constructor(private readonly redisService: RedisService) {}
 
-  async assertAllowed(policy: AuthRateLimitPolicy, request: Request): Promise<void> {
+  async assertAllowed(
+    policy: AuthRateLimitPolicy,
+    request: Request,
+  ): Promise<void> {
     const buckets = this.buildBuckets(policy, request);
     let retryAfterSeconds = 0;
 
     for (const bucket of buckets) {
-      const result = await this.redisService.increment(bucket.key, bucket.windowSeconds);
+      const result = await this.redisService.increment(
+        bucket.key,
+        bucket.windowSeconds,
+      );
 
       if (result.count > bucket.limit) {
         retryAfterSeconds = Math.max(retryAfterSeconds, result.ttlSeconds);
@@ -41,7 +47,10 @@ export class AuthRateLimitService {
     }
   }
 
-  private buildBuckets(policy: AuthRateLimitPolicy, request: Request): RateLimitBucket[] {
+  private buildBuckets(
+    policy: AuthRateLimitPolicy,
+    request: Request,
+  ): RateLimitBucket[] {
     const ipHash = this.hashValue(this.extractClientIp(request));
     const buckets: RateLimitBucket[] = [
       {
@@ -53,7 +62,9 @@ export class AuthRateLimitService {
 
     switch (policy) {
       case 'register': {
-        const emailHash = this.hashValue(this.extractBodyString(request, 'email'));
+        const emailHash = this.hashValue(
+          this.extractBodyString(request, 'email'),
+        );
         buckets.push({
           key: this.composeKey(policy, 'ip', ipHash),
           limit: authConfig.rateLimitRegisterIpMaxRequests,
@@ -68,7 +79,9 @@ export class AuthRateLimitService {
       }
       case 'login': {
         const identifierHash = this.hashValue(
-          this.normalizeIdentifier(this.extractBodyString(request, 'identifier')),
+          this.normalizeIdentifier(
+            this.extractBodyString(request, 'identifier'),
+          ),
         );
         buckets.push({
           key: this.composeKey(policy, 'ip', ipHash),
@@ -76,7 +89,11 @@ export class AuthRateLimitService {
           windowSeconds: authConfig.rateLimitLoginWindowSeconds,
         });
         buckets.push({
-          key: this.composeKey(policy, 'identifier-ip', `${identifierHash}:${ipHash}`),
+          key: this.composeKey(
+            policy,
+            'identifier-ip',
+            `${identifierHash}:${ipHash}`,
+          ),
           limit: authConfig.rateLimitLoginIdentifierIpMaxAttempts,
           windowSeconds: authConfig.rateLimitLoginWindowSeconds,
         });
@@ -87,14 +104,20 @@ export class AuthRateLimitService {
           this.extractCookie(request, 'refresh_token') ?? 'missing',
         );
         buckets.push({
-          key: this.composeKey(policy, 'token-ip', `${refreshTokenHash}:${ipHash}`),
+          key: this.composeKey(
+            policy,
+            'token-ip',
+            `${refreshTokenHash}:${ipHash}`,
+          ),
           limit: authConfig.rateLimitRefreshTokenIpMaxRequests,
           windowSeconds: authConfig.rateLimitRefreshWindowSeconds,
         });
         break;
       }
       case 'forgotPassword': {
-        const emailHash = this.hashValue(this.extractBodyString(request, 'email'));
+        const emailHash = this.hashValue(
+          this.extractBodyString(request, 'email'),
+        );
         buckets.push({
           key: this.composeKey(policy, 'email-ip', `${emailHash}:${ipHash}`),
           limit: authConfig.rateLimitForgotPasswordEmailIpMaxRequests,
@@ -103,7 +126,9 @@ export class AuthRateLimitService {
         break;
       }
       case 'resendVerification': {
-        const emailHash = this.hashValue(this.extractBodyString(request, 'email'));
+        const emailHash = this.hashValue(
+          this.extractBodyString(request, 'email'),
+        );
         buckets.push({
           key: this.composeKey(policy, 'email-ip', `${emailHash}:${ipHash}`),
           limit: authConfig.rateLimitResendVerificationEmailIpMaxRequests,
@@ -130,7 +155,11 @@ export class AuthRateLimitService {
           windowSeconds: authConfig.rateLimitTwoFactorVerifyWindowSeconds,
         });
         buckets.push({
-          key: this.composeKey(policy, 'challenge-ip', `${challengeTokenHash}:${ipHash}`),
+          key: this.composeKey(
+            policy,
+            'challenge-ip',
+            `${challengeTokenHash}:${ipHash}`,
+          ),
           limit: authConfig.rateLimitTwoFactorVerifyChallengeIpMaxAttempts,
           windowSeconds: authConfig.rateLimitTwoFactorVerifyWindowSeconds,
         });
@@ -141,7 +170,11 @@ export class AuthRateLimitService {
     return buckets;
   }
 
-  private composeKey(policy: AuthRateLimitPolicy, dimension: string, value: string) {
+  private composeKey(
+    policy: AuthRateLimitPolicy,
+    dimension: string,
+    value: string,
+  ) {
     return `auth:rate-limit:${policy}:${dimension}:${value}`;
   }
 
@@ -151,7 +184,8 @@ export class AuthRateLimitService {
   }
 
   private extractCookie(request: Request, key: string) {
-    const value = (request as Request & { cookies?: Record<string, unknown> }).cookies?.[key];
+    const value = (request as Request & { cookies?: Record<string, unknown> })
+      .cookies?.[key];
     return typeof value === 'string' ? value : undefined;
   }
 
@@ -159,10 +193,14 @@ export class AuthRateLimitService {
     const forwardedFor = request.headers['x-forwarded-for'];
 
     if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
-      return this.normalizeIp(forwardedFor.split(',')[0]?.trim() ?? forwardedFor);
+      return this.normalizeIp(
+        forwardedFor.split(',')[0]?.trim() ?? forwardedFor,
+      );
     }
 
-    return this.normalizeIp(request.ip || request.socket.remoteAddress || 'unknown');
+    return this.normalizeIp(
+      request.ip || request.socket.remoteAddress || 'unknown',
+    );
   }
 
   private hashValue(value: string) {

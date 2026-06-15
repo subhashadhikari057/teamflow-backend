@@ -36,6 +36,8 @@ import { OAuthCallbackQueryDto } from './dto/oauth-callback-query.dto';
 import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateUserSettingDto } from './dto/update-user-setting.dto';
+import { UserSettingResponseDto } from './dto/user-setting-response.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { SetCurrentWorkspaceDto } from './dto/set-current-workspace.dto';
@@ -72,7 +74,10 @@ export class AuthController {
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  @ApiResponse({ status: 403, description: 'Email not verified or account inactive' })
+  @ApiResponse({
+    status: 403,
+    description: 'Email not verified or account inactive',
+  })
   @ApiResponse({ status: 429, description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
@@ -142,7 +147,10 @@ export class AuthController {
   @ApiOperation({ summary: 'Resend the email verification token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  @ApiResponse({ status: 429, description: 'Too many resend verification attempts' })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many resend verification attempts',
+  })
   resendVerification(
     @Body() dto: ResendVerificationDto,
   ): Promise<AuthActionResponseDto> {
@@ -155,8 +163,13 @@ export class AuthController {
   @ApiOperation({ summary: 'Request a password reset token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  @ApiResponse({ status: 429, description: 'Too many forgot password attempts' })
-  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<AuthActionResponseDto> {
+  @ApiResponse({
+    status: 429,
+    description: 'Too many forgot password attempts',
+  })
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<AuthActionResponseDto> {
     return this.authService.forgotPassword(dto);
   }
 
@@ -175,8 +188,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change the password for the authenticated user' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
-  @ApiResponse({ status: 400, description: 'Validation error or password login not enabled' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or current password is incorrect' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or password login not enabled',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or current password is incorrect',
+  })
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
@@ -199,10 +218,15 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set the current workspace for the authenticated session' })
+  @ApiOperation({
+    summary: 'Set the current workspace for the authenticated session',
+  })
   @ApiResponse({ status: 200, type: AuthUserResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Not a member of the selected workspace' })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a member of the selected workspace',
+  })
   setCurrentWorkspace(
     @CurrentUser() user: AuthUser,
     @Body() dto: SetCurrentWorkspaceDto,
@@ -224,6 +248,39 @@ export class AuthController {
     @Body() dto: UpdateProfileDto,
   ): Promise<AuthUserResponseDto> {
     return this.authService.updateProfile(user, dto);
+  }
+
+  @Get('user-preference-setting')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiTags('User Preference Setting')
+  @ApiOperation({ summary: 'Get the authenticated user preference setting' })
+  @ApiResponse({ status: 200, type: UserSettingResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getUserSetting(
+    @CurrentUser() user: AuthUser,
+  ): Promise<UserSettingResponseDto> {
+    return this.authService.getUserSetting(user);
+  }
+
+  @Post('user-preference-setting')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiTags('User Preference Setting')
+  @ApiOperation({
+    summary: 'Create or update the authenticated user preference setting',
+  })
+  @ApiResponse({ status: 200, type: UserSettingResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  updateUserSetting(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateUserSettingDto,
+  ): Promise<UserSettingResponseDto> {
+    return this.authService.updateUserSetting(user, dto);
   }
 
   @Get('google')
@@ -251,15 +308,19 @@ export class AuthController {
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGoogleCallback(
-        query.code,
-        query.state,
-        buildSessionMetadata(req),
-      );
+      const { loginResult, redirectUri } =
+        await this.authService.handleGoogleCallback(
+          query.code,
+          query.state,
+          buildSessionMetadata(req),
+        );
       const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
-        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set(
+          'challengeToken',
+          loginResult.challengeToken!,
+        );
         loginUrl.searchParams.set('redirectTo', redirectTo);
         dest = loginUrl.toString();
       } else {
@@ -268,7 +329,9 @@ export class AuthController {
         successUrl.searchParams.set('oauth', 'google_success');
         dest = successUrl.toString();
       }
-    } catch { /* dest stays as error redirect */ }
+    } catch {
+      /* dest stays as error redirect */
+    }
     res.redirect(302, dest);
   }
 
@@ -297,15 +360,19 @@ export class AuthController {
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGithubCallback(
-        query.code,
-        query.state,
-        buildSessionMetadata(req),
-      );
+      const { loginResult, redirectUri } =
+        await this.authService.handleGithubCallback(
+          query.code,
+          query.state,
+          buildSessionMetadata(req),
+        );
       const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
-        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set(
+          'challengeToken',
+          loginResult.challengeToken!,
+        );
         loginUrl.searchParams.set('redirectTo', redirectTo);
         dest = loginUrl.toString();
       } else {
@@ -314,7 +381,9 @@ export class AuthController {
         successUrl.searchParams.set('oauth', 'github_success');
         dest = successUrl.toString();
       }
-    } catch { /* dest stays as error redirect */ }
+    } catch {
+      /* dest stays as error redirect */
+    }
     res.redirect(302, dest);
   }
 }

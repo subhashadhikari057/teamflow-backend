@@ -47,8 +47,12 @@ export class AuthSessionsService {
     );
   }
 
-  async listActiveSessions(user: AuthUser): Promise<AuthSessionsListResponseDto> {
-    const sessions = await this.authRepository.findActiveSessionsByUserId(user.id);
+  async listActiveSessions(
+    user: AuthUser,
+  ): Promise<AuthSessionsListResponseDto> {
+    const sessions = await this.authRepository.findActiveSessionsByUserId(
+      user.id,
+    );
 
     return plainToInstance(
       AuthSessionsListResponseDto,
@@ -88,7 +92,10 @@ export class AuthSessionsService {
   }
 
   async revokeOtherSessions(user: AuthUser): Promise<AuthActionResponseDto> {
-    await this.authRepository.revokeOtherSessionsForUser(user.id, user.sessionId);
+    await this.authRepository.revokeOtherSessionsForUser(
+      user.id,
+      user.sessionId,
+    );
 
     return plainToInstance(
       AuthActionResponseDto,
@@ -179,12 +186,15 @@ export class AuthSessionsService {
       return null;
     }
 
-    const membership = await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
-      latestWorkspaceSession.currentWorkspaceId,
-      userId,
-    );
+    const membership =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        latestWorkspaceSession.currentWorkspaceId,
+        userId,
+      );
 
-    return membership?.isActive ? latestWorkspaceSession.currentWorkspaceId : null;
+    return membership?.isActive
+      ? latestWorkspaceSession.currentWorkspaceId
+      : null;
   }
 
   private hashToken(token: string) {

@@ -15,10 +15,9 @@ export class AuthRateLimitGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const policy = this.reflector.getAllAndOverride<AuthRateLimitPolicy | undefined>(
-      AUTH_RATE_LIMIT_POLICY_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const policy = this.reflector.getAllAndOverride<
+      AuthRateLimitPolicy | undefined
+    >(AUTH_RATE_LIMIT_POLICY_KEY, [context.getHandler(), context.getClass()]);
 
     if (!policy) {
       return true;

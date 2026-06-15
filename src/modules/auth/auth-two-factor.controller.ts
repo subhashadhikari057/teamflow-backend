@@ -1,5 +1,20 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
@@ -32,7 +47,9 @@ export class AuthTwoFactorController {
   @ApiResponse({ status: 200, type: AuthTwoFactorEnableResponseDto })
   @ApiResponse({ status: 400, description: '2FA is already enabled' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  enable(@CurrentUser() user: AuthUser): Promise<AuthTwoFactorEnableResponseDto> {
+  enable(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AuthTwoFactorEnableResponseDto> {
     return this.authTwoFactorService.enable(user);
   }
 
@@ -42,7 +59,10 @@ export class AuthTwoFactorController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify the first TOTP code and activate 2FA' })
   @ApiResponse({ status: 200, type: AuthTwoFactorBackupCodesResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid TOTP code or 2FA not yet set up' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid TOTP code or 2FA not yet set up',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   confirm(
     @CurrentUser() user: AuthUser,
@@ -58,7 +78,10 @@ export class AuthTwoFactorController {
   @ApiOperation({ summary: 'Disable 2FA using the current password' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: '2FA is not enabled' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or password is incorrect' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or password is incorrect',
+  })
   disable(
     @CurrentUser() user: AuthUser,
     @Body() dto: DisableTwoFactorDto,
@@ -71,8 +94,14 @@ export class AuthTwoFactorController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Verify a 2FA code during login' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
-  @ApiResponse({ status: 400, description: 'Invalid or expired 2FA code or challenge token' })
-  @ApiResponse({ status: 429, description: 'Too many two-factor verification attempts' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid or expired 2FA code or challenge token',
+  })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many two-factor verification attempts',
+  })
   async verify(
     @Body() dto: VerifyTwoFactorDto,
     @Req() req: Request,
@@ -93,7 +122,10 @@ export class AuthTwoFactorController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get the most recently generated backup codes' })
   @ApiResponse({ status: 200, type: AuthTwoFactorBackupCodesResponseDto })
-  @ApiResponse({ status: 400, description: '2FA is not enabled or no backup codes available' })
+  @ApiResponse({
+    status: 400,
+    description: '2FA is not enabled or no backup codes available',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   getBackupCodes(
     @CurrentUser() user: AuthUser,
@@ -105,10 +137,15 @@ export class AuthTwoFactorController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Regenerate backup codes for 2FA (requires current password)' })
+  @ApiOperation({
+    summary: 'Regenerate backup codes for 2FA (requires current password)',
+  })
   @ApiResponse({ status: 200, type: AuthTwoFactorBackupCodesResponseDto })
   @ApiResponse({ status: 400, description: '2FA is not enabled' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or password is incorrect' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or password is incorrect',
+  })
   regenerateBackupCodes(
     @CurrentUser() user: AuthUser,
     @Body() dto: RegenerateBackupCodesDto,

@@ -1,14 +1,12 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { UserStatus } from '@prisma/client';
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  MaxLength,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateProfileDto {
-  @ApiPropertyOptional({ description: 'Display name', example: 'Subhash Adhikari' })
+  @ApiPropertyOptional({
+    description: 'Display name',
+    example: 'Subhash Adhikari',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -23,7 +21,10 @@ export class UpdateProfileDto {
   @MaxLength(500)
   avatarUrl?: string;
 
-  @ApiPropertyOptional({ description: 'Phone number', example: '+9779827828632' })
+  @ApiPropertyOptional({
+    description: 'Phone number',
+    example: '+9779827828632',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(20)

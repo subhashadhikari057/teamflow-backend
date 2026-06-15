@@ -3,7 +3,8 @@ import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class OAuthAuthorizationQueryDto {
   @ApiPropertyOptional({
-    description: 'Optional client redirect path to remember through OAuth state',
+    description:
+      'Optional client redirect path to remember through OAuth state',
   })
   @IsOptional()
   @IsString()

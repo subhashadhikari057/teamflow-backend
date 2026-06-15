@@ -51,6 +51,44 @@ export class AuthRepository {
     });
   }
 
+  async findUserSettingByUserId(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        settings: true,
+      },
+    });
+
+    return user?.settings ?? null;
+  }
+
+  async upsertUserSetting(userId: string, messageSoundEnabled: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        settings: {
+          upsert: {
+            create: {
+              messageSoundEnabled,
+            },
+            update: {
+              messageSoundEnabled,
+            },
+          },
+        },
+      },
+      select: {
+        settings: true,
+      },
+    });
+
+    if (!user.settings) {
+      throw new Error('User setting upsert failed');
+    }
+
+    return user.settings;
+  }
+
   createSession(data: Prisma.SessionUncheckedCreateInput) {
     return this.prisma.session.create({ data });
   }
@@ -214,7 +252,9 @@ export class AuthRepository {
     });
   }
 
-  createTwoFactorBackupCodes(data: Prisma.TwoFactorBackupCodeUncheckedCreateInput[]) {
+  createTwoFactorBackupCodes(
+    data: Prisma.TwoFactorBackupCodeUncheckedCreateInput[],
+  ) {
     return this.prisma.twoFactorBackupCode.createMany({
       data,
     });

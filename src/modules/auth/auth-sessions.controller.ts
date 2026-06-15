@@ -1,5 +1,18 @@
-import { Controller, Delete, Get, HttpCode, HttpStatus, Param, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  Delete,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiBearerAuth,
+  ApiOperation,
+  ApiResponse,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
@@ -16,15 +29,21 @@ export class AuthSessionsController {
   constructor(private readonly authSessionsService: AuthSessionsService) {}
 
   @Get()
-  @ApiOperation({ summary: 'List all active sessions for the authenticated user' })
+  @ApiOperation({
+    summary: 'List all active sessions for the authenticated user',
+  })
   @ApiResponse({ status: 200, type: AuthSessionsListResponseDto })
-  listSessions(@CurrentUser() user: AuthUser): Promise<AuthSessionsListResponseDto> {
+  listSessions(
+    @CurrentUser() user: AuthUser,
+  ): Promise<AuthSessionsListResponseDto> {
     return this.authSessionsService.listActiveSessions(user);
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Revoke a specific session for the authenticated user' })
+  @ApiOperation({
+    summary: 'Revoke a specific session for the authenticated user',
+  })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Session not found' })
