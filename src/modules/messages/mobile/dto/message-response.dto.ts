@@ -55,6 +55,28 @@ export class MessageResponseDto {
   content!: string;
 
   @ApiProperty({
+    description: 'Whether the message is pinned',
+    example: false,
+  })
+  @Expose()
+  isPinned!: boolean;
+
+  @ApiPropertyOptional({
+    description: 'When the message was pinned',
+    example: '2026-06-16T10:35:00.000Z',
+  })
+  @Expose()
+  pinnedAt?: Date | null;
+
+  @ApiPropertyOptional({
+    description: 'User who pinned the message',
+    type: MessageSenderResponseDto,
+  })
+  @Expose()
+  @Type(() => MessageSenderResponseDto)
+  pinnedBy?: MessageSenderResponseDto | null;
+
+  @ApiProperty({
     description: 'Attached files',
     type: [MessageAttachmentResponseDto],
   })

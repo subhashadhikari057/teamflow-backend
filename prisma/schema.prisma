@@ -61,6 +61,7 @@ model User {
   channelMembers       ChannelMember[]
   sentInvites          WorkspaceInvite[]     @relation("InviteSender")
   revokedInvites       WorkspaceInvite[]     @relation("InviteRevoker")
+  pinnedChannelMessages ChannelMessagePin[]  @relation("ChannelMessagePinUser")
   settings             UserSetting?
 
   @@index([email])
@@ -251,6 +252,7 @@ model Channel {
   creator   User            @relation("ChannelCreator", fields: [createdBy], references: [id])
   members   ChannelMember[]
   messages  Message[]
+  messagePins ChannelMessagePin[]
 
   @@unique([workspaceId, name])
   @@index([workspaceId])
@@ -291,12 +293,29 @@ model Message {
   channel     Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
   sender      User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
   attachments MessageAttachment[]
+  pin         ChannelMessagePin?
 
   @@index([channelId])
   @@index([senderId])
   @@index([deletedAt])
   @@index([createdAt])
   @@map("messages")
+}
+
+model ChannelMessagePin {
+  channelId String
+  messageId String   @unique
+  pinnedBy  String
+  pinnedAt  DateTime @default(now())
+
+  channel      Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message      Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedByUser User    @relation("ChannelMessagePinUser", fields: [pinnedBy], references: [id], onDelete: Cascade)
+
+  @@id([channelId, messageId])
+  @@index([channelId, pinnedAt])
+  @@index([pinnedBy])
+  @@map("channel_message_pins")
 }
 
 model MessageAttachment {

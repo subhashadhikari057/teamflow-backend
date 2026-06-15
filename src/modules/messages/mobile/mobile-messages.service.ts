@@ -1,12 +1,14 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ChannelMemberRole } from '@prisma/client';
+import { ChannelMemberRole, WorkspaceRole } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AppException } from '../../../common/exceptions/app.exception';
 import { ChannelMembersRepository } from '../../channels/repositories/channel-members.repository';
 import { ChannelsRepository } from '../../channels/repositories/channels.repository';
+import { WorkspaceMembersRepository } from '../../workspaces/repositories/workspace-members.repository';
 import type { MessageWithSender } from '../interfaces/messages.interface';
 import { MessagesGateway } from '../messages.gateway';
 import { MessagesRealtimeService } from '../messages-realtime.service';
+import { ChannelMessagePinsRepository } from '../repositories/channel-message-pins.repository';
 import { MessagesRepository } from '../repositories/messages.repository';
 import { MESSAGES_ERROR_CODES } from '../messages.types';
 import { CreateMessageDto } from './dto/create-message.dto';
@@ -21,6 +23,8 @@ export class MobileMessagesService {
     private readonly messagesRepository: MessagesRepository,
     private readonly channelsRepository: ChannelsRepository,
     private readonly channelMembersRepository: ChannelMembersRepository,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
+    private readonly channelMessagePinsRepository: ChannelMessagePinsRepository,
     private readonly messagesGateway: MessagesGateway,
     private readonly messagesRealtimeService: MessagesRealtimeService,
   ) {}
@@ -187,6 +191,93 @@ export class MobileMessagesService {
     return response;
   }
 
+  async pinMessage(
+    userId: string,
+    workspaceId: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<MessageResponseDto> {
+    const channel = await this.getChannelOrThrow(workspaceId, channelId);
+    await this.getMembershipOrThrow(channelId, userId);
+    await this.assertCanManagePins(workspaceId, userId);
+
+    if (channel.isArchived) {
+      throw new AppException(
+        MESSAGES_ERROR_CODES.CHANNEL_ARCHIVED,
+        'Cannot pin messages in an archived channel',
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+
+    const message = await this.getMessageOrThrow(messageId, channelId);
+
+    if (!message.pin) {
+      await this.channelMessagePinsRepository.create({
+        channelId,
+        messageId,
+        pinnedBy: userId,
+      });
+    }
+
+    const refreshedMessage = await this.getMessageOrThrow(messageId, channelId);
+    const response = this.mapMessageResponse(refreshedMessage);
+    this.messagesGateway.emitMessageUpdated(workspaceId, channelId, response);
+
+    return response;
+  }
+
+  async unpinMessage(
+    userId: string,
+    workspaceId: string,
+    channelId: string,
+    messageId: string,
+  ): Promise<MessageResponseDto> {
+    const channel = await this.getChannelOrThrow(workspaceId, channelId);
+    await this.getMembershipOrThrow(channelId, userId);
+    await this.assertCanManagePins(workspaceId, userId);
+
+    if (channel.isArchived) {
+      throw new AppException(
+        MESSAGES_ERROR_CODES.CHANNEL_ARCHIVED,
+        'Cannot unpin messages in an archived channel',
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+
+    const message = await this.getMessageOrThrow(messageId, channelId);
+
+    if (message.pin) {
+      await this.channelMessagePinsRepository.delete(channelId, messageId);
+    }
+
+    const refreshedMessage = await this.getMessageOrThrow(messageId, channelId);
+    const response = this.mapMessageResponse(refreshedMessage);
+    this.messagesGateway.emitMessageUpdated(workspaceId, channelId, response);
+
+    return response;
+  }
+
+  async listPinnedMessages(
+    userId: string,
+    workspaceId: string,
+    channelId: string,
+  ): Promise<MessageResponseDto[]> {
+    const channel = await this.getChannelOrThrow(workspaceId, channelId);
+    await this.getMembershipOrThrow(channelId, userId);
+
+    if (channel.isArchived) {
+      throw new AppException(
+        MESSAGES_ERROR_CODES.CHANNEL_ARCHIVED,
+        'Cannot read pinned messages from an archived channel',
+        { status: HttpStatus.UNPROCESSABLE_ENTITY },
+      );
+    }
+
+    const messages = await this.messagesRepository.findPinnedByChannel(channelId);
+
+    return messages.map((message) => this.mapMessageResponse(message));
+  }
+
   async deleteMessage(
     userId: string,
     workspaceId: string,
@@ -214,6 +305,7 @@ export class MobileMessagesService {
       );
     }
 
+    await this.channelMessagePinsRepository.deleteByMessageId(messageId);
     await this.messagesRepository.softDelete(messageId);
     this.messagesGateway.emitMessageDeleted(workspaceId, channelId, messageId);
     await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(
@@ -281,6 +373,9 @@ export class MobileMessagesService {
         id: message.id,
         channelId: message.channelId,
         content: message.content,
+        isPinned: Boolean(message.pin),
+        pinnedAt: message.pin?.pinnedAt ?? null,
+        pinnedBy: message.pin?.pinnedByUser ?? null,
         attachments: message.attachments,
         senderId: message.senderId,
         sender: message.sender,
@@ -290,6 +385,30 @@ export class MobileMessagesService {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  private async assertCanManagePins(
+    workspaceId: string,
+    userId: string,
+  ): Promise<void> {
+    const workspaceMember =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        workspaceId,
+        userId,
+      );
+
+    if (
+      !workspaceMember ||
+      !workspaceMember.isActive ||
+      (workspaceMember.role !== WorkspaceRole.OWNER &&
+        workspaceMember.role !== WorkspaceRole.ADMIN)
+    ) {
+      throw new AppException(
+        MESSAGES_ERROR_CODES.MESSAGE_PIN_INVALID,
+        'Only workspace owners and admins can pin or unpin messages',
+        { status: HttpStatus.FORBIDDEN },
+      );
+    }
   }
 
   private validateAttachmentsOrThrow(

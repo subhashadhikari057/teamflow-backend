@@ -17,6 +17,18 @@ const messageWithSenderInclude = {
       createdAt: 'asc',
     },
   },
+  pin: {
+    include: {
+      pinnedByUser: {
+        select: {
+          id: true,
+          name: true,
+          username: true,
+          avatarUrl: true,
+        },
+      },
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 interface FindChannelMessagesInput {
@@ -98,5 +110,19 @@ export class MessagesRepository {
           : {}),
       },
     });
+  }
+
+  findPinnedByChannel(channelId: string): Promise<MessageWithSender[]> {
+    return this.prisma.message.findMany({
+      where: {
+        channelId,
+        deletedAt: null,
+        pin: {
+          isNot: null,
+        },
+      },
+      include: messageWithSenderInclude,
+      orderBy: [{ pin: { pinnedAt: 'desc' } }, { createdAt: 'desc' }, { id: 'desc' }],
+    }) as Promise<MessageWithSender[]>;
   }
 }
