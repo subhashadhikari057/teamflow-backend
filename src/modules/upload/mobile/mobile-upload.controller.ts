@@ -57,7 +57,7 @@ export class MobileUploadController {
         file: {
           type: 'string',
           format: 'binary',
-          description: 'Image file to upload',
+          description: 'File to upload',
         },
       },
       required: ['file'],
@@ -67,12 +67,12 @@ export class MobileUploadController {
     name: 'optimize',
     required: false,
     type: Boolean,
-    description: 'Optimize the uploaded image before saving',
+    description: 'Optimize the uploaded file if it is an image before saving',
     example: true,
   })
   @ApiResponse({ status: 201, type: MobileImageUploadResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  @ApiResponse({ status: 422, description: 'Image processing failed' })
+  @ApiResponse({ status: 422, description: 'File processing failed' })
   uploadSingleImage(
     @UploadedFile() file: Express.Multer.File | undefined,
     @Query() dto: UploadImageOptionsDto,
@@ -95,7 +95,7 @@ export class MobileUploadController {
       properties: {
         files: {
           type: 'array',
-          description: 'Image files to upload',
+          description: 'Files to upload',
           items: {
             type: 'string',
             format: 'binary',
@@ -109,12 +109,12 @@ export class MobileUploadController {
     name: 'optimize',
     required: false,
     type: Boolean,
-    description: 'Optimize the uploaded images before saving',
+    description: 'Optimize uploaded images before saving',
     example: true,
   })
   @ApiResponse({ status: 201, type: MobileMultipleImageUploadResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  @ApiResponse({ status: 422, description: 'Image processing failed' })
+  @ApiResponse({ status: 422, description: 'File processing failed' })
   uploadMultipleImages(
     @UploadedFiles() files: Express.Multer.File[] | undefined,
     @Query() dto: UploadImageOptionsDto,
@@ -143,5 +143,24 @@ export class MobileUploadController {
     response.setHeader('Content-Type', image.contentType);
 
     return new StreamableFile(image.buffer);
+  }
+
+  @Get('files/:fileName')
+  @ApiOperation({ summary: 'Read an uploaded file' })
+  @ApiParam({
+    name: 'fileName',
+    description: 'Stored file name',
+    example: '0d6f9e5a-f7f1-4c5e-9192-2d5c7b5d2d23.pdf',
+  })
+  @ApiResponse({ status: 200, description: 'Uploaded file stream' })
+  @ApiResponse({ status: 404, description: 'File not found' })
+  async getFile(
+    @Param() params: UploadImageFileNameParamDto,
+    @Res({ passthrough: true }) response: Response,
+  ): Promise<StreamableFile> {
+    const file = await this.mobileUploadService.getFile(params.fileName);
+    response.setHeader('Content-Type', file.contentType);
+
+    return new StreamableFile(file.buffer);
   }
 }

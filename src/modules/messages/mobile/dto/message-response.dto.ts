@@ -1,5 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
+import { MessageAttachmentResponseDto } from './message-attachment-response.dto';
 
 export class MessageSenderResponseDto {
   @ApiProperty({
@@ -52,6 +53,14 @@ export class MessageResponseDto {
   })
   @Expose()
   content!: string;
+
+  @ApiProperty({
+    description: 'Attached files',
+    type: [MessageAttachmentResponseDto],
+  })
+  @Expose()
+  @Type(() => MessageAttachmentResponseDto)
+  attachments!: MessageAttachmentResponseDto[];
 
   @ApiProperty({
     description: 'Sender user ID',

@@ -1,4 +1,4 @@
-export interface UploadImageResult {
+export interface UploadFileResult {
   contentType: string;
   fileName: string;
   mimeType: string;
@@ -8,7 +8,7 @@ export interface UploadImageResult {
   size: number;
 }
 
-export interface StoredUploadImage {
+export interface StoredUploadFile {
   buffer: Buffer;
   contentType: string;
 }

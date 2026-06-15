@@ -288,14 +288,33 @@ model Message {
   updatedAt DateTime @updatedAt
   deletedAt DateTime?
 
-  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
-  sender  User    @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  channel     Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  attachments MessageAttachment[]
 
   @@index([channelId])
   @@index([senderId])
   @@index([deletedAt])
   @@index([createdAt])
   @@map("messages")
+}
+
+model MessageAttachment {
+  id           String   @id @default(uuid())
+  messageId    String
+  fileName     String
+  originalName String
+  relativePath String
+  contentType  String
+  mimeType     String
+  size         Int
+  optimized    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
 }
 
 model UserSetting {

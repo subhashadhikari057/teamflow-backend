@@ -4,7 +4,7 @@ import { MobileImageUploadResponseDto } from './mobile-image-upload-response.dto
 
 export class MobileMultipleImageUploadResponseDto {
   @ApiProperty({
-    description: 'Uploaded image results',
+    description: 'Uploaded file results',
     type: [MobileImageUploadResponseDto],
   })
   @Expose()

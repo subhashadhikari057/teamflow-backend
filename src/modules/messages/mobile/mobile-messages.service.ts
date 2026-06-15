@@ -33,12 +33,15 @@ export class MobileMessagesService {
   ): Promise<MessageResponseDto> {
     const channel = await this.getChannelOrThrow(workspaceId, channelId);
     const membership = await this.getMembershipOrThrow(channelId, userId);
-    const content = dto.content.trim();
+    const content = dto.content?.trim() ?? '';
+    const attachments = dto.attachments ?? [];
 
-    if (!content) {
+    this.validateAttachmentsOrThrow(attachments);
+
+    if (!content && attachments.length === 0) {
       throw new AppException(
         MESSAGES_ERROR_CODES.MESSAGE_CONTENT_REQUIRED,
-        'Message content is required',
+        'Message content or at least one attachment is required',
         { status: HttpStatus.BAD_REQUEST },
       );
     }
@@ -60,9 +63,32 @@ export class MobileMessagesService {
     }
 
     const message = await this.messagesRepository.create({
-      channelId,
-      senderId: userId,
       content,
+      channel: {
+        connect: {
+          id: channelId,
+        },
+      },
+      sender: {
+        connect: {
+          id: userId,
+        },
+      },
+      ...(attachments.length > 0
+        ? {
+            attachments: {
+              create: attachments.map((attachment) => ({
+                fileName: attachment.fileName,
+                originalName: attachment.originalName,
+                relativePath: attachment.relativePath,
+                contentType: attachment.contentType,
+                mimeType: attachment.mimeType,
+                size: attachment.size,
+                optimized: attachment.optimized,
+              })),
+            },
+          }
+        : {}),
     });
     await this.channelMembersRepository.update(membership.id, {
       lastReadAt: message.createdAt,
@@ -255,6 +281,7 @@ export class MobileMessagesService {
         id: message.id,
         channelId: message.channelId,
         content: message.content,
+        attachments: message.attachments,
         senderId: message.senderId,
         sender: message.sender,
         createdAt: message.createdAt,
@@ -263,5 +290,29 @@ export class MobileMessagesService {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  private validateAttachmentsOrThrow(
+    attachments: CreateMessageDto['attachments'],
+  ): void {
+    if (!attachments) {
+      return;
+    }
+
+    for (const attachment of attachments) {
+      const expectedRelativePathForImage = `images/${attachment.fileName}`;
+      const expectedRelativePathForFile = `files/${attachment.fileName}`;
+
+      if (
+        attachment.relativePath !== expectedRelativePathForImage &&
+        attachment.relativePath !== expectedRelativePathForFile
+      ) {
+        throw new AppException(
+          MESSAGES_ERROR_CODES.ATTACHMENT_INVALID,
+          'Attachment path must match the uploaded file name',
+          { status: HttpStatus.BAD_REQUEST },
+        );
+      }
+    }
   }
 }

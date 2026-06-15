@@ -1,4 +1,4 @@
-import type { Message } from '@prisma/client';
+import type { Message, MessageAttachment } from '@prisma/client';
 
 export interface MessageWithSender extends Message {
   sender: {
@@ -7,4 +7,5 @@ export interface MessageWithSender extends Message {
     username: string;
     avatarUrl: string | null;
   };
+  attachments: MessageAttachment[];
 }

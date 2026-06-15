@@ -12,6 +12,11 @@ const messageWithSenderInclude = {
       avatarUrl: true,
     },
   },
+  attachments: {
+    orderBy: {
+      createdAt: 'asc',
+    },
+  },
 } satisfies Prisma.MessageInclude;
 
 interface FindChannelMessagesInput {
@@ -29,7 +34,7 @@ interface CountUnreadMessagesInput {
 export class MessagesRepository {
   constructor(private readonly prisma: PrismaService) {}
 
-  create(data: Prisma.MessageUncheckedCreateInput): Promise<MessageWithSender> {
+  create(data: Prisma.MessageCreateInput): Promise<MessageWithSender> {
     return this.prisma.message.create({
       data,
       include: messageWithSenderInclude,

@@ -4,7 +4,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UploadImageOptionsDto {
   @ApiPropertyOptional({
-    description: 'Whether to optimize the uploaded image before saving',
+    description: 'Whether to optimize the uploaded file before saving when it is an image',
     example: true,
     default: true,
   })
