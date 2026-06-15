@@ -71,6 +71,7 @@ export class MobileMessagesService {
     this.messagesGateway.emitTypingStop(workspaceId, channelId, {
       id: userId,
       username: message.sender.username,
+      avatarUrl: message.sender.avatarUrl,
     });
     this.messagesGateway.emitMessageCreated(workspaceId, channelId, response);
     await this.messagesRealtimeService.emitChannelMetaUpdatedForChannelMembers(

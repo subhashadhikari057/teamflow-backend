@@ -44,6 +44,7 @@ type TypingPayload = {
   channelId: string;
   userId: string;
   username: string;
+  avatarUrl?: string | null;
 };
 
 @Injectable()
@@ -178,24 +179,31 @@ export class MessagesGateway
   ) {
     const dto = this.validatePayload(payload, ChannelRoomActionDto);
     const user = this.ensureSocketUser(client);
-    await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
+    const membership = await this.assertChannelMembership(
+      user.id,
+      dto.workspaceId,
+      dto.channelId,
+    );
+    const typingPayload = this.buildTypingPayload(
+      dto.workspaceId,
+      dto.channelId,
+      {
+        id: user.id,
+        username: membership.user.username,
+        avatarUrl: membership.user.avatarUrl,
+      },
+    );
 
     this.clearTypingTimeout(dto.channelId, user.id);
 
     client
       .to(this.channelRoom(dto.channelId))
-      .emit(
-        'typing.start',
-        this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
-      );
+      .emit('typing.start', typingPayload);
 
     const timeout = setTimeout(() => {
       this.server
         .to(this.channelRoom(dto.channelId))
-        .emit(
-          'typing.stop',
-          this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
-        );
+        .emit('typing.stop', typingPayload);
       this.typingTimeouts.delete(this.typingKey(dto.channelId, user.id));
     }, 4000);
 
@@ -211,16 +219,22 @@ export class MessagesGateway
   ) {
     const dto = this.validatePayload(payload, ChannelRoomActionDto);
     const user = this.ensureSocketUser(client);
-    await this.assertChannelMembership(user.id, dto.workspaceId, dto.channelId);
+    const membership = await this.assertChannelMembership(
+      user.id,
+      dto.workspaceId,
+      dto.channelId,
+    );
 
     this.clearTypingTimeout(dto.channelId, user.id);
 
-    client
-      .to(this.channelRoom(dto.channelId))
-      .emit(
-        'typing.stop',
-        this.buildTypingPayload(dto.workspaceId, dto.channelId, user),
-      );
+    client.to(this.channelRoom(dto.channelId)).emit(
+      'typing.stop',
+      this.buildTypingPayload(dto.workspaceId, dto.channelId, {
+        id: user.id,
+        username: membership.user.username,
+        avatarUrl: membership.user.avatarUrl,
+      }),
+    );
 
     return { ok: true };
   }
@@ -285,7 +299,7 @@ export class MessagesGateway
   emitTypingStop(
     workspaceId: string,
     channelId: string,
-    user: { id: string; username: string },
+    user: { id: string; username: string; avatarUrl?: string | null },
   ) {
     this.clearTypingTimeout(channelId, user.id);
     this.server.to(this.channelRoom(channelId)).emit('typing.stop', {
@@ -293,6 +307,7 @@ export class MessagesGateway
       channelId,
       userId: user.id,
       username: user.username,
+      avatarUrl: user.avatarUrl ?? null,
     });
   }
 
@@ -371,13 +386,14 @@ export class MessagesGateway
   private buildTypingPayload(
     workspaceId: string,
     channelId: string,
-    user: AuthUser,
+    user: { id: string; username: string; avatarUrl?: string | null },
   ): TypingPayload {
     return {
       workspaceId,
       channelId,
       userId: user.id,
       username: user.username,
+      avatarUrl: user.avatarUrl ?? null,
     };
   }
 
@@ -447,11 +463,10 @@ export class MessagesGateway
       );
     }
 
-    const membership =
-      await this.channelMembersRepository.findByChannelAndUserRaw(
-        channelId,
-        userId,
-      );
+    const membership = await this.channelMembersRepository.findByChannelAndUser(
+      channelId,
+      userId,
+    );
 
     if (!membership) {
       throw new WsException(
@@ -462,5 +477,7 @@ export class MessagesGateway
         ).message,
       );
     }
+
+    return membership;
   }
 }
