@@ -1,7 +1,10 @@
 import type { Response } from 'express';
 import { appConfig } from '../../config/app.config';
 
-export function setAuthCookies(res: Response, tokens: { accessToken: string; refreshToken: string }) {
+export function setAuthCookies(
+  res: Response,
+  tokens: { accessToken: string; refreshToken: string },
+) {
   res.cookie('access_token', tokens.accessToken, {
     httpOnly: true,
     sameSite: 'lax',

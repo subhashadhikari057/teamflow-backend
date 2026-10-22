@@ -4,7 +4,8 @@ import { AuthSessionResponseDto } from './auth-session-response.dto';
 
 export class AuthLoginResponseDto {
   @ApiPropertyOptional({
-    description: 'Whether two-factor verification is required before completing login',
+    description:
+      'Whether two-factor verification is required before completing login',
     example: false,
   })
   @Expose()
@@ -18,7 +19,8 @@ export class AuthLoginResponseDto {
   challengeToken?: string;
 
   @ApiPropertyOptional({
-    description: 'Present only when the login is fully authenticated (no 2FA required)',
+    description:
+      'Present only when the login is fully authenticated (no 2FA required)',
     type: AuthSessionResponseDto,
   })
   @Expose()

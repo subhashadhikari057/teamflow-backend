@@ -4,8 +4,6 @@ import {
   type PasswordReset,
   type Prisma,
   type TwoFactorBackupCode,
-  type Session,
-  type User,
 } from '@prisma/client';
 import { PrismaService } from '../../../infrastructure/database/prisma.service';
 
@@ -31,6 +29,17 @@ export class AuthRepository {
     });
   }
 
+  findWorkspaceSummaryById(id: string) {
+    return this.prisma.workspace.findFirst({
+      where: { id, deletedAt: null },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+      },
+    });
+  }
+
   createUser(data: Prisma.UserCreateInput) {
     return this.prisma.user.create({ data });
   }
@@ -42,14 +51,77 @@ export class AuthRepository {
     });
   }
 
+  async findUserSettingByUserId(userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, deletedAt: null },
+      select: {
+        settings: true,
+      },
+    });
+
+    return user?.settings ?? null;
+  }
+
+  async upsertUserSetting(userId: string, messageSoundEnabled: boolean) {
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: {
+        settings: {
+          upsert: {
+            create: {
+              messageSoundEnabled,
+            },
+            update: {
+              messageSoundEnabled,
+            },
+          },
+        },
+      },
+      select: {
+        settings: true,
+      },
+    });
+
+    if (!user.settings) {
+      throw new Error('User setting upsert failed');
+    }
+
+    return user.settings;
+  }
+
   createSession(data: Prisma.SessionUncheckedCreateInput) {
     return this.prisma.session.create({ data });
+  }
+
+  findSessionContextById(id: string) {
+    return this.prisma.session.findUnique({
+      where: { id },
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
+    });
   }
 
   findSessionByHash(tokenHash: string) {
     return this.prisma.session.findFirst({
       where: { tokenHash },
-      include: { user: true },
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 
@@ -70,6 +142,19 @@ export class AuthRepository {
     });
   }
 
+  findLatestWorkspaceSelectionSession(userId: string) {
+    return this.prisma.session.findFirst({
+      where: {
+        userId,
+        currentWorkspaceId: { not: null },
+      },
+      orderBy: [{ lastActiveAt: 'desc' }, { createdAt: 'desc' }],
+      select: {
+        currentWorkspaceId: true,
+      },
+    });
+  }
+
   revokeSession(id: string) {
     return this.prisma.session.update({
       where: { id },
@@ -81,6 +166,23 @@ export class AuthRepository {
     return this.prisma.session.update({
       where: { id },
       data: { lastActiveAt: new Date() },
+    });
+  }
+
+  updateSession(id: string, data: Prisma.SessionUncheckedUpdateInput) {
+    return this.prisma.session.update({
+      where: { id },
+      data,
+      include: {
+        user: true,
+        currentWorkspace: {
+          select: {
+            id: true,
+            slug: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 
@@ -150,7 +252,9 @@ export class AuthRepository {
     });
   }
 
-  createTwoFactorBackupCodes(data: Prisma.TwoFactorBackupCodeUncheckedCreateInput[]) {
+  createTwoFactorBackupCodes(
+    data: Prisma.TwoFactorBackupCodeUncheckedCreateInput[],
+  ) {
     return this.prisma.twoFactorBackupCode.createMany({
       data,
     });

@@ -6,20 +6,28 @@ import { EmailModule } from './infrastructure/email/email.module';
 import { PrismaModule } from './infrastructure/database/prisma.module';
 import { RedisModule } from './infrastructure/redis/redis.module';
 import { AuthModule } from './modules/auth/auth.module';
+import { ChannelsModule } from './modules/channels/channels.module';
 import { StarterModule } from './modules/starter/starter.module';
+import { UploadModule } from './modules/upload/upload.module';
 import { UsersModule } from './modules/users/users.module';
+import { WorkspacesModule } from './modules/workspaces/workspaces.module';
+import { MessagesModule } from './modules/messages/messages.module';
 import { StartupModule } from './startup/startup.module';
 
 @Module({
   imports: [
     JwtModule.register({}),
     AuthModule,
+    ChannelsModule,
     EmailModule,
     PrismaModule,
     RedisModule,
+    MessagesModule,
     StarterModule,
     StartupModule,
+    UploadModule,
     UsersModule,
+    WorkspacesModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -13,18 +13,27 @@ import { AuthSessionResponseDto } from './dto/auth-session-response.dto';
 import { AuthSessionsListResponseDto } from './dto/auth-sessions-list-response.dto';
 import { AuthUserResponseDto } from './dto/auth-user-response.dto';
 import { TokenPairResponseDto } from './dto/token-pair-response.dto';
-import type { AccessTokenPayload, RefreshTokenPayload } from './interfaces/auth.interface';
+import type {
+  AccessTokenPayload,
+  RefreshTokenPayload,
+  SessionMetadata,
+} from './interfaces/auth.interface';
 import { AuthRepository } from './repositories/auth.repository';
+import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 
 @Injectable()
 export class AuthSessionsService {
   constructor(
     private readonly authRepository: AuthRepository,
     private readonly jwtService: JwtService,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
   ) {}
 
-  async issueSessionResponse(user: User): Promise<AuthSessionResponseDto> {
-    const tokens = await this.issueTokenPair(user);
+  async issueSessionResponse(
+    user: User,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthSessionResponseDto> {
+    const tokens = await this.issueTokenPair(user, sessionMetadata);
 
     return plainToInstance(
       AuthSessionResponseDto,
@@ -38,8 +47,12 @@ export class AuthSessionsService {
     );
   }
 
-  async listActiveSessions(user: AuthUser): Promise<AuthSessionsListResponseDto> {
-    const sessions = await this.authRepository.findActiveSessionsByUserId(user.id);
+  async listActiveSessions(
+    user: AuthUser,
+  ): Promise<AuthSessionsListResponseDto> {
+    const sessions = await this.authRepository.findActiveSessionsByUserId(
+      user.id,
+    );
 
     return plainToInstance(
       AuthSessionsListResponseDto,
@@ -79,7 +92,10 @@ export class AuthSessionsService {
   }
 
   async revokeOtherSessions(user: AuthUser): Promise<AuthActionResponseDto> {
-    await this.authRepository.revokeOtherSessionsForUser(user.id, user.sessionId);
+    await this.authRepository.revokeOtherSessionsForUser(
+      user.id,
+      user.sessionId,
+    );
 
     return plainToInstance(
       AuthActionResponseDto,
@@ -88,8 +104,15 @@ export class AuthSessionsService {
     );
   }
 
-  private async issueTokenPair(user: User): Promise<TokenPairResponseDto> {
+  private async issueTokenPair(
+    user: User,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<TokenPairResponseDto> {
     const sessionId = randomUUID();
+    const currentWorkspaceId = await this.resolveCurrentWorkspaceId(
+      user.id,
+      sessionMetadata?.currentWorkspaceId,
+    );
     const accessTokenPayload: AccessTokenPayload = {
       sub: user.id,
       email: user.email,
@@ -119,8 +142,15 @@ export class AuthSessionsService {
     await this.authRepository.createSession({
       id: sessionId,
       userId: user.id,
+      currentWorkspaceId,
       tokenHash: this.hashToken(refreshToken),
       expiresAt: this.resolveExpiryDate(authConfig.jwtRefreshExpiresIn),
+      deviceToken: sessionMetadata?.deviceToken ?? null,
+      deviceType: sessionMetadata?.deviceType ?? null,
+      deviceName: sessionMetadata?.deviceName ?? null,
+      ipAddress: sessionMetadata?.ipAddress ?? null,
+      userAgent: sessionMetadata?.userAgent ?? null,
+      location: sessionMetadata?.location ?? null,
     });
 
     return plainToInstance(
@@ -133,6 +163,38 @@ export class AuthSessionsService {
       },
       { excludeExtraneousValues: true },
     );
+  }
+
+  private async resolveCurrentWorkspaceId(
+    userId: string,
+    requestedWorkspaceId?: string | null,
+  ): Promise<string | null> {
+    if (requestedWorkspaceId) {
+      const membership =
+        await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+          requestedWorkspaceId,
+          userId,
+        );
+
+      return membership?.isActive ? requestedWorkspaceId : null;
+    }
+
+    const latestWorkspaceSession =
+      await this.authRepository.findLatestWorkspaceSelectionSession(userId);
+
+    if (!latestWorkspaceSession?.currentWorkspaceId) {
+      return null;
+    }
+
+    const membership =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        latestWorkspaceSession.currentWorkspaceId,
+        userId,
+      );
+
+    return membership?.isActive
+      ? latestWorkspaceSession.currentWorkspaceId
+      : null;
   }
 
   private hashToken(token: string) {

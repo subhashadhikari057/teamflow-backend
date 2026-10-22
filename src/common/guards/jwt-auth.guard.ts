@@ -62,6 +62,7 @@ export class JwtAuthGuard implements CanActivate {
 
       request.user = {
         id: payload.sub,
+        currentWorkspaceId: null,
         email: payload.email,
         sessionId: payload.sessionId,
         username: payload.username,

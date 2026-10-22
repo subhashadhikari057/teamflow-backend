@@ -7,10 +7,11 @@ import {
   Patch,
   Post,
   Query,
+  Req,
   Res,
   UseGuards,
 } from '@nestjs/common';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -35,40 +36,58 @@ import { OAuthCallbackQueryDto } from './dto/oauth-callback-query.dto';
 import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { UpdateProfileDto } from './dto/update-profile.dto';
+import { UpdateUserSettingDto } from './dto/update-user-setting.dto';
+import { UserSettingResponseDto } from './dto/user-setting-response.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetCurrentWorkspaceDto } from './dto/set-current-workspace.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthService } from './auth.service';
+import { buildSessionMetadata } from './auth-session-metadata.util';
 import { setAuthCookies, clearAuthCookies } from './auth-cookies.util';
 import { appConfig } from '../../config/app.config';
+import { AuthRateLimitGuard } from './auth-rate-limit.guard';
+import { AuthRateLimit } from './auth-rate-limit.decorator';
 
 @ApiTags('Auth')
+@UseGuards(AuthRateLimitGuard)
 @Controller('auth')
 export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('register')
+  @AuthRateLimit('register')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Register a new user account' })
   @ApiResponse({ status: 201, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 409, description: 'Email or username already exists' })
+  @ApiResponse({ status: 429, description: 'Too many registration attempts' })
   register(@Body() dto: RegisterDto): Promise<AuthActionResponseDto> {
     return this.authService.register(dto);
   }
 
   @Post('login')
+  @AuthRateLimit('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Authenticate with email or username and password' })
   @ApiResponse({ status: 200, type: AuthLoginResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
-  @ApiResponse({ status: 403, description: 'Email not verified or account inactive' })
+  @ApiResponse({
+    status: 403,
+    description: 'Email not verified or account inactive',
+  })
+  @ApiResponse({ status: 429, description: 'Too many login attempts' })
   async login(
     @Body() dto: LoginDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthLoginResponseDto> {
-    const result = await this.authService.login(dto);
+    const result = await this.authService.login(
+      dto,
+      buildSessionMetadata(req, dto),
+    );
     if (result.session) {
       setAuthCookies(res, result.session.tokens);
     }
@@ -94,15 +113,21 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @AuthRateLimit('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Exchange a refresh token for a new session' })
   @ApiResponse({ status: 200, type: AuthSessionResponseDto })
   @ApiResponse({ status: 401, description: 'Invalid or missing refresh token' })
+  @ApiResponse({ status: 429, description: 'Too many refresh attempts' })
   async refresh(
     @Cookie('refresh_token') refreshToken: string | undefined,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ): Promise<AuthSessionResponseDto> {
-    const result = await this.authService.refresh(refreshToken);
+    const result = await this.authService.refresh(
+      refreshToken,
+      buildSessionMetadata(req),
+    );
     setAuthCookies(res, result.tokens);
     return result;
   }
@@ -117,10 +142,15 @@ export class AuthController {
   }
 
   @Post('resend-verification')
+  @AuthRateLimit('resendVerification')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Resend the email verification token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({
+    status: 429,
+    description: 'Too many resend verification attempts',
+  })
   resendVerification(
     @Body() dto: ResendVerificationDto,
   ): Promise<AuthActionResponseDto> {
@@ -128,11 +158,18 @@ export class AuthController {
   }
 
   @Post('forgot-password')
+  @AuthRateLimit('forgotPassword')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a password reset token' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
   @ApiResponse({ status: 400, description: 'Validation error' })
-  forgotPassword(@Body() dto: ForgotPasswordDto): Promise<AuthActionResponseDto> {
+  @ApiResponse({
+    status: 429,
+    description: 'Too many forgot password attempts',
+  })
+  forgotPassword(
+    @Body() dto: ForgotPasswordDto,
+  ): Promise<AuthActionResponseDto> {
     return this.authService.forgotPassword(dto);
   }
 
@@ -151,8 +188,14 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Change the password for the authenticated user' })
   @ApiResponse({ status: 200, type: AuthActionResponseDto })
-  @ApiResponse({ status: 400, description: 'Validation error or password login not enabled' })
-  @ApiResponse({ status: 401, description: 'Unauthorized or current password is incorrect' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error or password login not enabled',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized or current password is incorrect',
+  })
   changePassword(
     @CurrentUser() user: AuthUser,
     @Body() dto: ChangePasswordDto,
@@ -171,6 +214,26 @@ export class AuthController {
     return this.authService.me(user);
   }
 
+  @Patch('current-workspace')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Set the current workspace for the authenticated session',
+  })
+  @ApiResponse({ status: 200, type: AuthUserResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a member of the selected workspace',
+  })
+  setCurrentWorkspace(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: SetCurrentWorkspaceDto,
+  ): Promise<AuthUserResponseDto> {
+    return this.authService.setCurrentWorkspace(user, dto);
+  }
+
   @Patch('profile')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
@@ -187,10 +250,45 @@ export class AuthController {
     return this.authService.updateProfile(user, dto);
   }
 
+  @Get('user-preference-setting')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiTags('User Preference Setting')
+  @ApiOperation({ summary: 'Get the authenticated user preference setting' })
+  @ApiResponse({ status: 200, type: UserSettingResponseDto })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getUserSetting(
+    @CurrentUser() user: AuthUser,
+  ): Promise<UserSettingResponseDto> {
+    return this.authService.getUserSetting(user);
+  }
+
+  @Post('user-preference-setting')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.OK)
+  @ApiTags('User Preference Setting')
+  @ApiOperation({
+    summary: 'Create or update the authenticated user preference setting',
+  })
+  @ApiResponse({ status: 200, type: UserSettingResponseDto })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  updateUserSetting(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: UpdateUserSettingDto,
+  ): Promise<UserSettingResponseDto> {
+    return this.authService.updateUserSetting(user, dto);
+  }
+
   @Get('google')
+  @AuthRateLimit('googleOauth')
   @ApiOperation({ summary: 'Generate the Google OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
   @ApiResponse({ status: 503, description: 'Google OAuth is not configured' })
+  @ApiResponse({ status: 429, description: 'Too many Google OAuth attempts' })
   google(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {
@@ -205,15 +303,24 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
   async googleCallback(
     @Query() query: OAuthCallbackQueryDto,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGoogleCallback(query.code, query.state);
-      const redirectTo = redirectUri ?? '/nomor';
+      const { loginResult, redirectUri } =
+        await this.authService.handleGoogleCallback(
+          query.code,
+          query.state,
+          buildSessionMetadata(req),
+        );
+      const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
-        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set(
+          'challengeToken',
+          loginResult.challengeToken!,
+        );
         loginUrl.searchParams.set('redirectTo', redirectTo);
         dest = loginUrl.toString();
       } else {
@@ -222,14 +329,18 @@ export class AuthController {
         successUrl.searchParams.set('oauth', 'google_success');
         dest = successUrl.toString();
       }
-    } catch { /* dest stays as error redirect */ }
+    } catch {
+      /* dest stays as error redirect */
+    }
     res.redirect(302, dest);
   }
 
   @Get('github')
+  @AuthRateLimit('githubOauth')
   @ApiOperation({ summary: 'Generate the GitHub OAuth authorization URL' })
   @ApiResponse({ status: 200, type: OAuthRedirectResponseDto })
   @ApiResponse({ status: 503, description: 'GitHub OAuth is not configured' })
+  @ApiResponse({ status: 429, description: 'Too many GitHub OAuth attempts' })
   github(
     @Query() query: OAuthAuthorizationQueryDto,
   ): Promise<OAuthRedirectResponseDto> {
@@ -244,15 +355,24 @@ export class AuthController {
   @ApiResponse({ status: 302, description: 'Redirect to client after OAuth' })
   async githubCallback(
     @Query() query: OAuthCallbackQueryDto,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     let dest = `${appConfig.frontendBaseUrl}${AUTH_OAUTH_ERROR_REDIRECT_PATH}`;
     try {
-      const { loginResult, redirectUri } = await this.authService.handleGithubCallback(query.code, query.state);
-      const redirectTo = redirectUri ?? '/nomor';
+      const { loginResult, redirectUri } =
+        await this.authService.handleGithubCallback(
+          query.code,
+          query.state,
+          buildSessionMetadata(req),
+        );
+      const redirectTo = redirectUri ?? '/workspace';
       if (loginResult.requiresTwoFactor) {
         const loginUrl = new URL('/login', appConfig.frontendBaseUrl);
-        loginUrl.searchParams.set('challengeToken', loginResult.challengeToken!);
+        loginUrl.searchParams.set(
+          'challengeToken',
+          loginResult.challengeToken!,
+        );
         loginUrl.searchParams.set('redirectTo', redirectTo);
         dest = loginUrl.toString();
       } else {
@@ -261,7 +381,9 @@ export class AuthController {
         successUrl.searchParams.set('oauth', 'github_success');
         dest = successUrl.toString();
       }
-    } catch { /* dest stays as error redirect */ }
+    } catch {
+      /* dest stays as error redirect */
+    }
     res.redirect(302, dest);
   }
 }

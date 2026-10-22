@@ -29,31 +29,41 @@ enum UserStatus {
 }
 
 model User {
-  id                  String     @id @default(uuid())
-  email               String     @unique
-  username            String     @unique
-  passwordHash        String?
-  name                String
-  avatarUrl           String?
-  phone               String?    @unique
-  role                GlobalRole @default(USER)
-  isEmailVerified     Boolean    @default(false)
-  verificationToken   String?    @unique
-  verificationExpiry  DateTime?
-  twoFactorEnabled    Boolean    @default(false)
-  twoFactorSecret     String?
-  status              UserStatus @default(ONLINE)
-  timezone            String?
-  isActive            Boolean    @default(true)
-  lastSeenAt          DateTime?
-  createdAt           DateTime   @default(now())
-  updatedAt           DateTime   @updatedAt
-  deletedAt           DateTime?
+  id                 String     @id @default(uuid())
+  email              String     @unique
+  username           String     @unique
+  passwordHash       String?
+  name               String
+  avatarUrl          String?
+  phone              String?    @unique
+  role               GlobalRole @default(USER)
+  isEmailVerified    Boolean    @default(false)
+  verificationToken  String?    @unique
+  verificationExpiry DateTime?
+  twoFactorEnabled   Boolean    @default(false)
+  twoFactorSecret    String?
+  status             UserStatus @default(ONLINE)
+  timezone           String?
+  isActive           Boolean    @default(true)
+  lastSeenAt         DateTime?
+  createdAt          DateTime   @default(now())
+  updatedAt          DateTime   @updatedAt
+  deletedAt          DateTime?
 
   sessions             Session[]
   twoFactorBackupCodes TwoFactorBackupCode[]
   passwordResets       PasswordReset[]
   oauthAccounts        OAuthAccount[]
+  createdWorkspaces    Workspace[]           @relation("WorkspaceCreator")
+  createdChannels      Channel[]             @relation("ChannelCreator")
+  sentMessages         Message[]             @relation("MessageSender")
+  workspaceMemberships WorkspaceMember[]
+  channelMembers       ChannelMember[]
+  sentInvites          WorkspaceInvite[]     @relation("InviteSender")
+  revokedInvites       WorkspaceInvite[]     @relation("InviteRevoker")
+  pinnedChannelMessages ChannelMessagePin[]  @relation("ChannelMessagePinUser")
+  settings             UserSetting?
+
   @@index([email])
   @@index([username])
   @@index([deletedAt])
@@ -63,6 +73,7 @@ model User {
 model Session {
   id           String   @id @default(uuid())
   userId       String
+  currentWorkspaceId String?
   tokenHash    String   @unique
   expiresAt    DateTime
   isRevoked    Boolean  @default(false)
@@ -75,24 +86,26 @@ model Session {
   lastActiveAt DateTime @default(now())
   createdAt    DateTime @default(now())
 
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  currentWorkspace Workspace? @relation("SessionCurrentWorkspace", fields: [currentWorkspaceId], references: [id], onDelete: SetNull)
 
   @@index([userId])
+  @@index([currentWorkspaceId])
   @@index([tokenHash])
   @@index([expiresAt])
   @@map("sessions")
 }
 
 model PasswordReset {
-  id         String   @id @default(uuid())
-  userId     String
-  tokenHash  String   @unique
-  expiresAt  DateTime
-  usedAt     DateTime?
-  ipAddress  String?
-  createdAt  DateTime @default(now())
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String?
+  createdAt DateTime  @default(now())
 
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([tokenHash])
@@ -100,16 +113,240 @@ model PasswordReset {
 }
 
 model TwoFactorBackupCode {
-  id        String   @id @default(uuid())
+  id        String    @id @default(uuid())
   userId    String
   codeHash  String
   usedAt    DateTime?
-  createdAt DateTime @default(now())
+  createdAt DateTime  @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@map("two_factor_backup_codes")
+}
+
+enum WorkspacePlan {
+  FREE
+  PRO
+  BUSINESS
+  ENTERPRISE
+}
+
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  GUEST
+}
+
+enum InviteStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  REVOKED
+}
+
+enum ChannelType {
+  PUBLIC
+  PRIVATE
+}
+
+enum ChannelMemberRole {
+  ADMIN
+  MEMBER
+}
+
+model Workspace {
+  id                 String        @id @default(uuid())
+  name               String
+  slug               String        @unique
+  logoUrl            String?
+  description        String?
+  plan               WorkspacePlan @default(FREE)
+  isActive           Boolean       @default(true)
+  isVerified         Boolean       @default(false)
+  allowedEmailDomain String?
+  maxMembers         Int           @default(10)
+  createdBy          String
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  deletedAt          DateTime?
+
+  creator User              @relation("WorkspaceCreator", fields: [createdBy], references: [id])
+  members WorkspaceMember[]
+  invites WorkspaceInvite[]
+  channels Channel[]
+  currentWorkspaceSessions Session[] @relation("SessionCurrentWorkspace")
+
+  @@index([slug])
+  @@index([createdBy])
+  @@index([deletedAt])
+  @@map("workspaces")
+}
+
+model WorkspaceMember {
+  id          String        @id @default(uuid())
+  workspaceId String
+  userId      String
+  role        WorkspaceRole @default(MEMBER)
+  jobTitle    String?
+  department  String?
+  isActive    Boolean       @default(true)
+  lastReadAt  DateTime?
+  joinedAt    DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([workspaceId])
+  @@index([userId])
+  @@map("workspace_members")
+}
+
+model WorkspaceInvite {
+  id           String        @id @default(uuid())
+  workspaceId  String
+  email        String
+  role         WorkspaceRole @default(MEMBER)
+  token        String        @unique
+  invitedBy    String
+  status       InviteStatus  @default(PENDING)
+  expiresAt    DateTime
+  acceptedAt   DateTime?
+  declinedAt   DateTime?
+  revokedAt    DateTime?
+  revokedBy    String?
+  resendCount  Int           @default(0)
+  lastResentAt DateTime?
+  createdAt    DateTime      @default(now())
+
+  workspace Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter   User      @relation("InviteSender", fields: [invitedBy], references: [id])
+  revoker   User?     @relation("InviteRevoker", fields: [revokedBy], references: [id])
+
+  @@unique([workspaceId, email])
+  @@index([workspaceId])
+  @@index([email])
+  @@index([token])
+  @@map("workspace_invites")
+}
+
+model Channel {
+  id          String      @id @default(uuid())
+  workspaceId String
+  name        String
+  description String?
+  topic       String?
+  type        ChannelType @default(PUBLIC)
+  isReadOnly  Boolean     @default(false)
+  isArchived  Boolean     @default(false)
+  isGeneral   Boolean     @default(false)
+  createdBy   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  workspace Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator   User            @relation("ChannelCreator", fields: [createdBy], references: [id])
+  members   ChannelMember[]
+  messages  Message[]
+  messagePins ChannelMessagePin[]
+
+  @@unique([workspaceId, name])
+  @@index([workspaceId])
+  @@index([createdBy])
+  @@index([deletedAt])
+  @@map("channels")
+}
+
+model ChannelMember {
+  id         String            @id @default(uuid())
+  channelId  String
+  userId     String
+  role       ChannelMemberRole @default(MEMBER)
+  isArchived Boolean           @default(false)
+  lastReadAt DateTime?
+  joinedAt   DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  channel Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([channelId, userId])
+  @@index([channelId])
+  @@index([userId])
+  @@map("channel_members")
+}
+
+model Message {
+  id        String   @id @default(uuid())
+  channelId String
+  senderId  String
+  content   String
+  editedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  deletedAt DateTime?
+
+  channel     Channel             @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  sender      User                @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  attachments MessageAttachment[]
+  pin         ChannelMessagePin?
+
+  @@index([channelId])
+  @@index([senderId])
+  @@index([deletedAt])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+model ChannelMessagePin {
+  channelId String
+  messageId String   @unique
+  pinnedBy  String
+  pinnedAt  DateTime @default(now())
+
+  channel      Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  message      Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  pinnedByUser User    @relation("ChannelMessagePinUser", fields: [pinnedBy], references: [id], onDelete: Cascade)
+
+  @@id([channelId, messageId])
+  @@index([channelId, pinnedAt])
+  @@index([pinnedBy])
+  @@map("channel_message_pins")
+}
+
+model MessageAttachment {
+  id           String   @id @default(uuid())
+  messageId    String
+  fileName     String
+  originalName String
+  relativePath String
+  contentType  String
+  mimeType     String
+  size         Int
+  optimized    Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId])
+  @@map("message_attachments")
+}
+
+model UserSetting {
+  id                  String   @id @default(uuid())
+  userId              String   @unique
+  messageSoundEnabled Boolean  @default(true)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("user_settings")
 }
 
 model OAuthAccount {
@@ -123,10 +360,9 @@ model OAuthAccount {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
   @@map("oauth_accounts")
 }
-

@@ -15,6 +15,16 @@ export interface RefreshTokenPayload {
   type: 'refresh';
 }
 
+export interface SessionMetadata {
+  currentWorkspaceId?: string | null;
+  deviceName?: string | null;
+  deviceToken?: string | null;
+  deviceType?: string | null;
+  ipAddress?: string | null;
+  location?: string | null;
+  userAgent?: string | null;
+}
+
 export interface OAuthProfile {
   avatarUrl?: string;
   email: string;

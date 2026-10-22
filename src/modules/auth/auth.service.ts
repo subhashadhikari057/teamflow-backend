@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import {
   GlobalRole,
   OAuthProvider,
+  WorkspaceRole,
   type OAuthAccount,
   type PasswordReset,
   type User,
@@ -17,7 +18,10 @@ import { EmailService } from '../../infrastructure/email/email.service';
 import { RedisService } from '../../infrastructure/redis/redis.service';
 import type { AuthUser } from '../../common/interfaces/auth-user.interface';
 import { AUTH_ERROR_CODES, AUTH_OAUTH_STATE_PREFIX } from './auth.types';
-import type { OAuthProfile, RefreshTokenPayload } from './interfaces/auth.interface';
+import type {
+  OAuthProfile,
+  RefreshTokenPayload,
+} from './interfaces/auth.interface';
 import { AuthRepository } from './repositories/auth.repository';
 import { AuthActionResponseDto } from './dto/auth-action-response.dto';
 import { AuthLoginResponseDto } from './dto/auth-login-response.dto';
@@ -31,11 +35,16 @@ import { OAuthRedirectResponseDto } from './dto/oauth-redirect-response.dto';
 import { RegisterDto } from './dto/register.dto';
 import { ResendVerificationDto } from './dto/resend-verification.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SetCurrentWorkspaceDto } from './dto/set-current-workspace.dto';
+import { UpdateUserSettingDto } from './dto/update-user-setting.dto';
+import { UserSettingResponseDto } from './dto/user-setting-response.dto';
 import { VerifyEmailDto } from './dto/verify-email.dto';
 import { AuthSessionsService } from './auth-sessions.service';
 import { AuthTwoFactorService } from './auth-two-factor.service';
 import { buildPasswordResetEmail } from './emails/build-password-reset-email';
 import { buildVerificationEmail } from './emails/build-verification-email';
+import type { SessionMetadata } from './interfaces/auth.interface';
+import { WorkspaceMembersRepository } from '../workspaces/repositories/workspace-members.repository';
 
 @Injectable()
 export class AuthService {
@@ -46,6 +55,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly authSessionsService: AuthSessionsService,
     private readonly authTwoFactorService: AuthTwoFactorService,
+    private readonly workspaceMembersRepository: WorkspaceMembersRepository,
   ) {}
 
   async register(dto: RegisterDto): Promise<AuthActionResponseDto> {
@@ -83,7 +93,10 @@ export class AuthService {
     );
   }
 
-  async login(dto: LoginDto): Promise<AuthLoginResponseDto> {
+  async login(
+    dto: LoginDto,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthLoginResponseDto> {
     const user = dto.identifier.includes('@')
       ? await this.authRepository.findUserByEmail(dto.identifier.toLowerCase())
       : await this.authRepository.findUserByUsername(dto.identifier);
@@ -96,7 +109,10 @@ export class AuthService {
       );
     }
 
-    const passwordMatches = await bcrypt.compare(dto.password, user.passwordHash);
+    const passwordMatches = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!passwordMatches) {
       throw new AppException(
         AUTH_ERROR_CODES.INVALID_CREDENTIALS,
@@ -127,7 +143,10 @@ export class AuthService {
       return this.authTwoFactorService.createLoginChallenge(user);
     }
 
-    const session = await this.authSessionsService.issueSessionResponse(user);
+    const session = await this.authSessionsService.issueSessionResponse(
+      user,
+      sessionMetadata,
+    );
 
     return plainToInstance(
       AuthLoginResponseDto,
@@ -139,7 +158,10 @@ export class AuthService {
     );
   }
 
-  async logout(user: AuthUser, refreshToken: string | undefined): Promise<AuthActionResponseDto> {
+  async logout(
+    user: AuthUser,
+    refreshToken: string | undefined,
+  ): Promise<AuthActionResponseDto> {
     if (!refreshToken) {
       throw new AppException(
         AUTH_ERROR_CODES.REFRESH_TOKEN_NOT_FOUND,
@@ -148,7 +170,8 @@ export class AuthService {
       );
     }
     const refreshTokenHash = this.hashToken(refreshToken);
-    const session = await this.authRepository.findSessionByHash(refreshTokenHash);
+    const session =
+      await this.authRepository.findSessionByHash(refreshTokenHash);
 
     if (!session || session.userId !== user.id) {
       throw new AppException(
@@ -167,7 +190,10 @@ export class AuthService {
     );
   }
 
-  async refresh(refreshToken: string | undefined): Promise<AuthSessionResponseDto> {
+  async refresh(
+    refreshToken: string | undefined,
+    sessionMetadata?: SessionMetadata,
+  ): Promise<AuthSessionResponseDto> {
     if (!refreshToken) {
       throw new AppException(
         AUTH_ERROR_CODES.INVALID_REFRESH_TOKEN,
@@ -200,7 +226,8 @@ export class AuthService {
     }
 
     const refreshTokenHash = this.hashToken(refreshToken);
-    const session = await this.authRepository.findSessionByHash(refreshTokenHash);
+    const session =
+      await this.authRepository.findSessionByHash(refreshTokenHash);
 
     if (
       !session ||
@@ -216,15 +243,29 @@ export class AuthService {
     }
 
     await this.authRepository.revokeSession(session.id);
-    return this.authSessionsService.issueSessionResponse(session.user);
+    return this.authSessionsService.issueSessionResponse(session.user, {
+      currentWorkspaceId:
+        sessionMetadata?.currentWorkspaceId ?? session.currentWorkspaceId,
+      deviceToken: sessionMetadata?.deviceToken ?? session.deviceToken,
+      deviceType: sessionMetadata?.deviceType ?? session.deviceType,
+      deviceName: sessionMetadata?.deviceName ?? session.deviceName,
+      ipAddress: sessionMetadata?.ipAddress ?? session.ipAddress,
+      userAgent: sessionMetadata?.userAgent ?? session.userAgent,
+      location: sessionMetadata?.location ?? session.location,
+    });
   }
 
   async verifyEmail(dto: VerifyEmailDto) {
     const verificationTokenHash = this.hashToken(dto.token);
-    const user =
-      await this.authRepository.findUserByVerificationToken(verificationTokenHash);
+    const user = await this.authRepository.findUserByVerificationToken(
+      verificationTokenHash,
+    );
 
-    if (!user || !user.verificationExpiry || user.verificationExpiry <= new Date()) {
+    if (
+      !user ||
+      !user.verificationExpiry ||
+      user.verificationExpiry <= new Date()
+    ) {
       throw new AppException(
         AUTH_ERROR_CODES.INVALID_VERIFICATION_TOKEN,
         'Verification token is invalid or expired',
@@ -246,7 +287,9 @@ export class AuthService {
   }
 
   async resendVerification(dto: ResendVerificationDto) {
-    const user = await this.authRepository.findUserByEmail(dto.email.toLowerCase());
+    const user = await this.authRepository.findUserByEmail(
+      dto.email.toLowerCase(),
+    );
 
     if (user && !user.isEmailVerified && user.isActive && !user.deletedAt) {
       const verificationToken = this.generateOpaqueToken();
@@ -270,7 +313,9 @@ export class AuthService {
   }
 
   async forgotPassword(dto: ForgotPasswordDto) {
-    const user = await this.authRepository.findUserByEmail(dto.email.toLowerCase());
+    const user = await this.authRepository.findUserByEmail(
+      dto.email.toLowerCase(),
+    );
 
     if (user && user.isActive && !user.deletedAt) {
       const resetToken = this.generateOpaqueToken();
@@ -300,7 +345,9 @@ export class AuthService {
 
     return plainToInstance(
       AuthActionResponseDto,
-      { message: 'If the account exists, a password reset email has been sent' },
+      {
+        message: 'If the account exists, a password reset email has been sent',
+      },
       { excludeExtraneousValues: true },
     );
   }
@@ -379,8 +426,36 @@ export class AuthService {
   }
 
   async me(user: AuthUser) {
-    const dbUser = await this.getActiveUserOrThrow(user.id);
-    return this.mapUserResponse(dbUser);
+    const session = await this.authRepository.findSessionContextById(
+      user.sessionId,
+    );
+
+    if (!session || session.userId !== user.id || session.isRevoked) {
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'User not found',
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
+    }
+
+    if (!session.user.isActive || session.user.deletedAt) {
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'User not found',
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
+    }
+
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      session.currentWorkspaceId,
+    );
+
+    return this.mapUserResponse(session.user, currentWorkspace);
   }
 
   async updateProfile(user: AuthUser, dto: UpdateProfileDto) {
@@ -392,13 +467,99 @@ export class AuthService {
       ...(dto.status !== undefined && { status: dto.status }),
       ...(dto.timezone !== undefined && { timezone: dto.timezone }),
     });
-    return this.mapUserResponse(updated);
+    const session = await this.authRepository.findSessionContextById(
+      user.sessionId,
+    );
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      session?.currentWorkspaceId ?? null,
+    );
+    return this.mapUserResponse(updated, currentWorkspace);
+  }
+
+  async getUserSetting(user: AuthUser): Promise<UserSettingResponseDto> {
+    await this.getActiveUserOrThrow(user.id);
+    const setting = await this.authRepository.findUserSettingByUserId(user.id);
+
+    return plainToInstance(
+      UserSettingResponseDto,
+      {
+        messageSoundEnabled: setting?.messageSoundEnabled ?? true,
+      },
+      { excludeExtraneousValues: true },
+    );
+  }
+
+  async updateUserSetting(
+    user: AuthUser,
+    dto: UpdateUserSettingDto,
+  ): Promise<UserSettingResponseDto> {
+    await this.getActiveUserOrThrow(user.id);
+    const setting = await this.authRepository.upsertUserSetting(
+      user.id,
+      dto.messageSoundEnabled,
+    );
+
+    return plainToInstance(UserSettingResponseDto, setting, {
+      excludeExtraneousValues: true,
+    });
+  }
+
+  async setCurrentWorkspace(
+    user: AuthUser,
+    dto: SetCurrentWorkspaceDto,
+  ): Promise<AuthUserResponseDto> {
+    const session = await this.authRepository.findSessionContextById(
+      user.sessionId,
+    );
+
+    if (!session || session.userId !== user.id || session.isRevoked) {
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'User not found',
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
+    }
+
+    const membership =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        dto.workspaceId,
+        user.id,
+      );
+
+    if (!membership || !membership.isActive) {
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'You are not an active member of this workspace',
+        { status: HttpStatus.FORBIDDEN },
+      );
+    }
+
+    const updatedSession = await this.authRepository.updateSession(
+      user.sessionId,
+      {
+        currentWorkspaceId: dto.workspaceId,
+      },
+    );
+
+    const currentWorkspace = await this.resolveCurrentWorkspaceForUser(
+      user.id,
+      updatedSession.currentWorkspaceId,
+    );
+
+    return this.mapUserResponse(updatedSession.user, currentWorkspace);
   }
 
   async getGoogleAuthorizationUrl(redirectUri?: string, clientState?: string) {
     this.ensureGoogleOauthConfigured();
 
-    const state = await this.createOAuthState('google', redirectUri, clientState);
+    const state = await this.createOAuthState(
+      'google',
+      redirectUri,
+      clientState,
+    );
     const url = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     url.searchParams.set('client_id', authConfig.googleClientId);
     url.searchParams.set('redirect_uri', authConfig.googleCallbackUrl);
@@ -418,7 +579,11 @@ export class AuthService {
   async getGithubAuthorizationUrl(redirectUri?: string, clientState?: string) {
     this.ensureGithubOauthConfigured();
 
-    const state = await this.createOAuthState('github', redirectUri, clientState);
+    const state = await this.createOAuthState(
+      'github',
+      redirectUri,
+      clientState,
+    );
     const url = new URL('https://github.com/login/oauth/authorize');
     url.searchParams.set('client_id', authConfig.githubClientId);
     url.searchParams.set('redirect_uri', authConfig.githubCallbackUrl);
@@ -432,7 +597,11 @@ export class AuthService {
     );
   }
 
-  async handleGoogleCallback(code: string, state: string) {
+  async handleGoogleCallback(
+    code: string,
+    state: string,
+    sessionMetadata?: SessionMetadata,
+  ) {
     this.ensureGoogleOauthConfigured();
     const { redirectUri } = await this.consumeOAuthState('google', state);
 
@@ -465,24 +634,31 @@ export class AuthService {
       },
     });
 
-    const loginResult = await this.handleOAuthLogin({
-      avatarUrl: profile.picture,
-      email: profile.email,
-      emailVerified: profile.email_verified,
-      name: profile.name,
-      provider: OAuthProvider.GOOGLE,
-      providerAccessToken: tokenResponse.access_token,
-      providerAccountId: profile.sub,
-      providerRefreshToken: tokenResponse.refresh_token,
-      providerTokenExpiresAt: tokenResponse.expires_in
-        ? new Date(Date.now() + tokenResponse.expires_in * 1000)
-        : undefined,
-    });
+    const loginResult = await this.handleOAuthLogin(
+      {
+        avatarUrl: profile.picture,
+        email: profile.email,
+        emailVerified: profile.email_verified,
+        name: profile.name,
+        provider: OAuthProvider.GOOGLE,
+        providerAccessToken: tokenResponse.access_token,
+        providerAccountId: profile.sub,
+        providerRefreshToken: tokenResponse.refresh_token,
+        providerTokenExpiresAt: tokenResponse.expires_in
+          ? new Date(Date.now() + tokenResponse.expires_in * 1000)
+          : undefined,
+      },
+      sessionMetadata,
+    );
 
     return { loginResult, redirectUri };
   }
 
-  async handleGithubCallback(code: string, state: string) {
+  async handleGithubCallback(
+    code: string,
+    state: string,
+    sessionMetadata?: SessionMetadata,
+  ) {
     this.ensureGithubOauthConfigured();
     const { redirectUri } = await this.consumeOAuthState('github', state);
 
@@ -530,7 +706,8 @@ export class AuthService {
       });
 
       const primaryEmail =
-        emails.find((item) => item.primary) ?? emails.find((item) => item.verified);
+        emails.find((item) => item.primary) ??
+        emails.find((item) => item.verified);
 
       if (!primaryEmail) {
         throw new AppException(
@@ -544,16 +721,19 @@ export class AuthService {
       emailVerified = primaryEmail.verified;
     }
 
-    const loginResult = await this.handleOAuthLogin({
-      avatarUrl: profile.avatar_url,
-      email,
-      emailVerified,
-      name: profile.name || profile.login,
-      provider: OAuthProvider.GITHUB,
-      providerAccessToken: tokenResponse.access_token,
-      providerAccountId: String(profile.id),
-      providerRefreshToken: tokenResponse.refresh_token,
-    });
+    const loginResult = await this.handleOAuthLogin(
+      {
+        avatarUrl: profile.avatar_url,
+        email,
+        emailVerified,
+        name: profile.name || profile.login,
+        provider: OAuthProvider.GITHUB,
+        providerAccessToken: tokenResponse.access_token,
+        providerAccountId: String(profile.id),
+        providerRefreshToken: tokenResponse.refresh_token,
+      },
+      sessionMetadata,
+    );
 
     return { loginResult, redirectUri };
   }
@@ -570,7 +750,9 @@ export class AuthService {
       );
     }
 
-    const existingUsername = await this.authRepository.findUserByUsername(dto.username);
+    const existingUsername = await this.authRepository.findUserByUsername(
+      dto.username,
+    );
     if (existingUsername) {
       throw new AppException(
         AUTH_ERROR_CODES.USERNAME_ALREADY_TAKEN,
@@ -580,19 +762,69 @@ export class AuthService {
     }
   }
 
-  private mapUserResponse(user: User) {
-    return plainToInstance(AuthUserResponseDto, user, {
-      excludeExtraneousValues: true,
-    });
+  private mapUserResponse(
+    user: User,
+    currentWorkspace?: {
+      id: string;
+      slug: string;
+      name: string;
+      role: WorkspaceRole;
+    } | null,
+  ) {
+    return plainToInstance(
+      AuthUserResponseDto,
+      {
+        ...user,
+        currentWorkspace: currentWorkspace ?? null,
+      },
+      {
+        excludeExtraneousValues: true,
+      },
+    );
+  }
+
+  private async resolveCurrentWorkspaceForUser(
+    userId: string,
+    workspaceId: string | null | undefined,
+  ) {
+    if (!workspaceId) {
+      return null;
+    }
+
+    const membership =
+      await this.workspaceMembersRepository.findByWorkspaceAndUserRaw(
+        workspaceId,
+        userId,
+      );
+
+    if (!membership || !membership.isActive) {
+      return null;
+    }
+
+    const workspace =
+      await this.authRepository.findWorkspaceSummaryById(workspaceId);
+
+    if (!workspace) {
+      return null;
+    }
+
+    return {
+      ...workspace,
+      role: membership.role,
+    };
   }
 
   private async getActiveUserOrThrow(userId: string) {
     const user = await this.authRepository.findUserById(userId);
 
     if (!user || !user.isActive || user.deletedAt) {
-      throw new AppException(AUTH_ERROR_CODES.USER_NOT_FOUND, 'User not found', {
-        status: HttpStatus.NOT_FOUND,
-      });
+      throw new AppException(
+        AUTH_ERROR_CODES.USER_NOT_FOUND,
+        'User not found',
+        {
+          status: HttpStatus.NOT_FOUND,
+        },
+      );
     }
 
     return user;
@@ -611,7 +843,10 @@ export class AuthService {
   }
 
   private async sendVerificationEmail(user: User, token: string) {
-    const verificationLink = new URL('/verify-email', appConfig.frontendBaseUrl);
+    const verificationLink = new URL(
+      '/verify-email',
+      appConfig.frontendBaseUrl,
+    );
     verificationLink.searchParams.set('token', token);
     const email = buildVerificationEmail({
       verificationLink: verificationLink.toString(),
@@ -660,21 +895,24 @@ export class AuthService {
   ) {
     const state = this.generateOpaqueToken();
     const key = `${AUTH_OAUTH_STATE_PREFIX}:${provider}:${state}`;
-    const client = this.redisService.getClient();
-
-    await client.set(
+    await this.redisService.set(
       key,
-      JSON.stringify({ redirectUri: redirectUri ?? null, clientState: clientState ?? null }),
-      { EX: authConfig.oauthStateExpirySeconds },
+      JSON.stringify({
+        redirectUri: redirectUri ?? null,
+        clientState: clientState ?? null,
+      }),
+      authConfig.oauthStateExpirySeconds,
     );
 
     return state;
   }
 
-  private async consumeOAuthState(provider: 'google' | 'github', state: string) {
+  private async consumeOAuthState(
+    provider: 'google' | 'github',
+    state: string,
+  ) {
     const key = `${AUTH_OAUTH_STATE_PREFIX}:${provider}:${state}`;
-    const client = this.redisService.getClient();
-    const value = await client.get(key);
+    const value = await this.redisService.get(key);
 
     if (!value) {
       throw new AppException(
@@ -684,11 +922,17 @@ export class AuthService {
       );
     }
 
-    await client.del(key);
-    return JSON.parse(value) as { clientState: string | null; redirectUri: string | null };
+    await this.redisService.del(key);
+    return JSON.parse(value) as {
+      clientState: string | null;
+      redirectUri: string | null;
+    };
   }
 
-  private async handleOAuthLogin(profile: OAuthProfile) {
+  private async handleOAuthLogin(
+    profile: OAuthProfile,
+    sessionMetadata?: SessionMetadata,
+  ) {
     const existingAccount = await this.authRepository.findOAuthAccount(
       profile.provider,
       profile.providerAccountId,
@@ -710,14 +954,25 @@ export class AuthService {
       });
 
       if (existingAccount.user.twoFactorEnabled) {
-        return this.authTwoFactorService.createLoginChallenge(existingAccount.user);
+        return this.authTwoFactorService.createLoginChallenge(
+          existingAccount.user,
+        );
       }
 
-      const session = await this.authSessionsService.issueSessionResponse(existingAccount.user);
-      return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
+      const session = await this.authSessionsService.issueSessionResponse(
+        existingAccount.user,
+        sessionMetadata,
+      );
+      return plainToInstance(
+        AuthLoginResponseDto,
+        { requiresTwoFactor: false, session },
+        { excludeExtraneousValues: true },
+      );
     }
 
-    let user = await this.authRepository.findUserByEmail(profile.email.toLowerCase());
+    let user = await this.authRepository.findUserByEmail(
+      profile.email.toLowerCase(),
+    );
 
     if (!user) {
       const username = await this.ensureUniqueUsername(
@@ -742,14 +997,23 @@ export class AuthService {
       expiresAt: profile.providerTokenExpiresAt ?? null,
     });
 
-    const session = await this.authSessionsService.issueSessionResponse(user);
-    return plainToInstance(AuthLoginResponseDto, { requiresTwoFactor: false, session }, { excludeExtraneousValues: true });
+    const session = await this.authSessionsService.issueSessionResponse(
+      user,
+      sessionMetadata,
+    );
+    return plainToInstance(
+      AuthLoginResponseDto,
+      { requiresTwoFactor: false, session },
+      { excludeExtraneousValues: true },
+    );
   }
 
   private usernameFromProfile(profile: OAuthProfile) {
     return (
-      profile.email.split('@')[0]?.replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase() ||
-      `user_${this.generateOpaqueToken().slice(0, 8)}`
+      profile.email
+        .split('@')[0]
+        ?.replace(/[^a-zA-Z0-9_]/g, '_')
+        .toLowerCase() || `user_${this.generateOpaqueToken().slice(0, 8)}`
     );
   }
 
